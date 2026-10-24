@@ -81,3 +81,11 @@ def get_vehicle_service(db: Session = Depends(get_db)) -> "VehicleService":
     from app.services.vehicle_service import VehicleService
 
     return VehicleService(VehicleRepository(db))
+
+
+def get_inventory_service(db: Session = Depends(get_db)) -> "InventoryService":
+    """Build the inventory service for one request."""
+    from app.repositories.vehicle_repository import VehicleRepository
+    from app.services.inventory_service import InventoryService
+
+    return InventoryService(VehicleRepository(db))

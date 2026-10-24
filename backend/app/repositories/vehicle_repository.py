@@ -5,7 +5,9 @@ routes never touch a Session. Swapping the storage engine means rewriting this
 class and nothing above it.
 """
 
-from sqlalchemy import Select, select
+from datetime import datetime, timezone
+
+from sqlalchemy import Select, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Vehicle
@@ -92,3 +94,37 @@ class VehicleRepository:
 
         statement = statement.order_by(Vehicle.make, Vehicle.model)
         return list(self._db.scalars(statement))
+
+    def decrement_stock(self, vehicle_id: str, quantity: int) -> int:
+        """Reduce stock by `quantity`, but only if that much is in stock.
+
+        The check and the write are one statement, so two callers cannot both
+        decide there is stock and then both take it. The caller inspects the
+        number of rows affected: 0 means the guard refused the update, never
+        that the stock went negative.
+        """
+        statement = (
+            update(Vehicle)
+            .where(Vehicle.id == vehicle_id, Vehicle.quantity >= quantity)
+            .values(
+                quantity=Vehicle.quantity - quantity,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        rows = self._db.execute(statement).rowcount
+        self._db.commit()
+        return rows
+
+    def increment_stock(self, vehicle_id: str, quantity: int) -> int:
+        """Increase stock by `quantity`, returning the rows affected."""
+        statement = (
+            update(Vehicle)
+            .where(Vehicle.id == vehicle_id)
+            .values(
+                quantity=Vehicle.quantity + quantity,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        rows = self._db.execute(statement).rowcount
+        self._db.commit()
+        return rows

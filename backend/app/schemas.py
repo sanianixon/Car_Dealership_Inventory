@@ -210,3 +210,34 @@ class VehicleSearch(BaseModel):
             # reported as a mistake instead of an empty result set.
             raise ValueError("minPrice cannot be greater than maxPrice")
         return self
+
+
+PurchaseQuantity = Annotated[
+    int, BeforeValidator(_reject_stringified_number), Field(ge=1)
+]
+
+
+class PurchaseRequest(BaseModel):
+    """Body of POST /api/vehicles/{id}/purchase. Defaults to a single unit."""
+
+    quantity: PurchaseQuantity = 1
+
+
+class RestockRequest(BaseModel):
+    """Body of POST /api/vehicles/{id}/restock. The quantity is mandatory."""
+
+    quantity: PurchaseQuantity
+
+
+class PurchaseResponse(BaseModel):
+    """Envelope returned by a purchase."""
+
+    vehicle: VehicleOut
+    purchased: int
+
+
+class RestockResponse(BaseModel):
+    """Envelope returned by a restock."""
+
+    vehicle: VehicleOut
+    restocked: int

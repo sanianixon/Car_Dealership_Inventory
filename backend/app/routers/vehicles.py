@@ -12,15 +12,25 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.deps import get_current_user, get_vehicle_service, require_admin
+from app.deps import (
+    get_current_user,
+    get_inventory_service,
+    get_vehicle_service,
+    require_admin,
+)
 from app.models import User
 from app.schemas import (
+    PurchaseRequest,
+    PurchaseResponse,
+    RestockRequest,
+    RestockResponse,
     VehicleCreate,
     VehicleListResponse,
     VehicleResponse,
     VehicleSearch,
     VehicleUpdate,
 )
+from app.services.inventory_service import InventoryService
 from app.services.vehicle_service import VehicleService
 
 router = APIRouter(prefix="/api/vehicles", tags=["vehicles"])
@@ -99,3 +109,27 @@ def delete_vehicle(
     """Delete a vehicle. Administrators only."""
     service.delete(vehicle_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{vehicle_id}/purchase", response_model=PurchaseResponse)
+def purchase_vehicle(
+    vehicle_id: str,
+    payload: PurchaseRequest = PurchaseRequest(),
+    service: InventoryService = Depends(get_inventory_service),
+    _: User = Depends(get_current_user),
+) -> PurchaseResponse:
+    """Buy one or more units, decreasing the stock."""
+    vehicle = service.purchase(vehicle_id, payload.quantity)
+    return PurchaseResponse(vehicle=vehicle, purchased=payload.quantity)
+
+
+@router.post("/{vehicle_id}/restock", response_model=RestockResponse)
+def restock_vehicle(
+    vehicle_id: str,
+    payload: RestockRequest,
+    service: InventoryService = Depends(get_inventory_service),
+    _: User = Depends(require_admin),
+) -> RestockResponse:
+    """Add units to a vehicle's stock. Administrators only."""
+    vehicle = service.restock(vehicle_id, payload.quantity)
+    return RestockResponse(vehicle=vehicle, restocked=payload.quantity)
