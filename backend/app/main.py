@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database import Base, engine
+from app.errors import register_error_handlers
 from app.routers import auth
 
 
@@ -16,6 +17,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Car Dealership Inventory System", lifespan=lifespan)
+
+register_error_handlers(app)
 
 app.include_router(auth.router)
 
