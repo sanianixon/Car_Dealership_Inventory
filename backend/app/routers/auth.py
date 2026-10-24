@@ -7,16 +7,33 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
-from app.schemas import RegisterRequest, RegisterResponse
-from app.security import hash_password
+from app.schemas import (
+    LoginRequest,
+    LoginResponse,
+    RegisterRequest,
+    RegisterResponse,
+)
+from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 EMAIL_TAKEN = "An account with that email already exists"
+INVALID_CREDENTIALS = "Invalid email or password"
+
+# Compared against when no account matches, so a login attempt costs the same
+# whether or not the email exists. Without this the response time alone would
+# reveal which emails are registered.
+_TIMING_EQUALISER_HASH = hash_password("timing-equaliser")
 
 
 def _email_conflict() -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=EMAIL_TAKEN)
+
+
+def _invalid_credentials() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_CREDENTIALS
+    )
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -42,3 +59,21 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> Registe
 
     db.refresh(user)
     return RegisterResponse(user=user)
+
+
+@router.post("/login", response_model=LoginResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
+    """Exchange credentials for a signed access token.
+
+    An unknown email and a wrong password raise the identical error, so the
+    endpoint cannot be used to discover which addresses have accounts.
+    """
+    user = db.scalar(select(User).where(User.email == payload.email))
+
+    password_hash = user.password_hash if user else _TIMING_EQUALISER_HASH
+    password_matches = verify_password(payload.password, password_hash)
+
+    if user is None or not password_matches:
+        raise _invalid_credentials()
+
+    return LoginResponse(token=create_access_token(user.id, user.role), user=user)

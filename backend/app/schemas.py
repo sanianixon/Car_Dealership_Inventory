@@ -46,3 +46,22 @@ class RegisterResponse(BaseModel):
     """Envelope returned by registration."""
 
     user: UserOut
+
+
+class LoginRequest(BaseModel):
+    """Body of POST /api/auth/login.
+
+    The password deliberately has no length constraint here: rejecting a short
+    password with a 400 would tell a caller that the password policy was the
+    problem. Login failures must all look identical.
+    """
+
+    email: NormalisedEmail
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Envelope returned by a successful login."""
+
+    token: str
+    user: UserOut
