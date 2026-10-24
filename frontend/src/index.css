@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Tailwind v4 reads these from @theme, so they are available as
+ * utilities (bg-petrol-600, text-tag-amber) and stay consistent across the app.
+ *
+ * The palette is a dealership forecourt: petrol blue-green for the brand,
+ * amber for "nearly gone", red for sold out.
+ */
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-petrol-50: #effcfa;
+  --color-petrol-100: #d6f6f1;
+  --color-petrol-200: #aeeae4;
+  --color-petrol-400: #45b5ad;
+  --color-petrol-600: #0f766e;
+  --color-petrol-700: #115e59;
+  --color-petrol-900: #0b3b38;
+
+  --color-forecourt-50: #f7f8f8;
+  --color-forecourt-100: #eef0f1;
+  --color-forecourt-300: #cbd2d6;
+  --color-forecourt-500: #6b7a82;
+  --color-forecourt-700: #3b474d;
+  --color-forecourt-900: #1b2327;
+
+  --color-tag-amber: #b45309;
+  --color-tag-red: #b42318;
+}
+
+html {
+  background-color: var(--color-forecourt-50);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-forecourt-900);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible keyboard focus everywhere, rather than relying on the browser default
+   that several resets remove. */
+:focus-visible {
+  outline: 2px solid var(--color-petrol-600);
+  outline-offset: 2px;
+}
