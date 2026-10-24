@@ -65,3 +65,29 @@ def db(temp_db: sessionmaker) -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture()
+def auth(client, db):
+    """Factory for Authorization headers.
+
+    Promoting the row after sign-in is deliberate: the token is unchanged, yet
+    the request is treated as an admin's, which demonstrates that the role is
+    read from the database and not from the token's claims.
+    """
+    from app.models import User
+
+    def _headers(email: str = "member@dealership.com", admin: bool = False) -> dict:
+        password = "Passw0rd!23"
+        client.post("/api/auth/register", json={"email": email, "password": password})
+
+        if admin:
+            db.query(User).filter(User.email == email).update({"role": "admin"})
+            db.commit()
+
+        token = client.post(
+            "/api/auth/login", json={"email": email, "password": password}
+        ).json()["token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    return _headers
