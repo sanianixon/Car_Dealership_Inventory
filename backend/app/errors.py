@@ -12,6 +12,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.services.exceptions import DomainError
+
 # FastAPI reports the location of a bad field as a tuple like
 # ("body", "price"). The caller only cares about the field name.
 _LOCATION_PREFIXES = {"body", "query", "path", "header", "cookie"}
@@ -56,7 +58,17 @@ async def validation_exception_handler(
     )
 
 
+async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    """Render a business-rule failure using the status code it declares.
+
+    This is what lets the service layer stay free of HTTP concerns: it raises
+    VehicleNotFoundError, and the mapping to 404 happens here.
+    """
+    return JSONResponse(status_code=exc.status_code, content=error_body(exc.message))
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Attach the handlers to an app. Called once, from main."""
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(DomainError, domain_error_handler)

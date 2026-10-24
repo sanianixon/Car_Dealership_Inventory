@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from app.database import Base, engine
 from app.errors import register_error_handlers
-from app.routers import auth
+from app.routers import auth, vehicles
 
 
 @asynccontextmanager
@@ -21,6 +21,7 @@ app = FastAPI(title="Car Dealership Inventory System", lifespan=lifespan)
 register_error_handlers(app)
 
 app.include_router(auth.router)
+app.include_router(vehicles.router)
 
 
 @app.get("/api/health", tags=["meta"])

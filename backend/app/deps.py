@@ -69,3 +69,15 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
             detail="Administrator privileges are required",
         )
     return user
+
+
+def get_vehicle_service(db: Session = Depends(get_db)) -> "VehicleService":
+    """Build the vehicle service for one request.
+
+    Assembling the layers here keeps the routes unaware of both the repository
+    and the session, and lets a test swap either one out.
+    """
+    from app.repositories.vehicle_repository import VehicleRepository
+    from app.services.vehicle_service import VehicleService
+
+    return VehicleService(VehicleRepository(db))
