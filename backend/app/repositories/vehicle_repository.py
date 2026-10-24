@@ -32,3 +32,14 @@ class VehicleRepository:
     def get(self, vehicle_id: str) -> Vehicle | None:
         """Return one vehicle, or None if the id is unknown."""
         return self._db.get(Vehicle, vehicle_id)
+
+    def save(self, vehicle: Vehicle) -> Vehicle:
+        """Flush pending changes to an already-tracked vehicle."""
+        self._db.commit()
+        self._db.refresh(vehicle)
+        return vehicle
+
+    def delete(self, vehicle: Vehicle) -> None:
+        """Remove a vehicle from the catalogue."""
+        self._db.delete(vehicle)
+        self._db.commit()

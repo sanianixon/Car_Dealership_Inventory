@@ -7,7 +7,7 @@ frontend consumes them directly.
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field, model_validator
 
 
 def _normalise_email(value: Any) -> Any:
@@ -138,3 +138,29 @@ class VehicleListResponse(BaseModel):
     """Envelope wrapping a list of vehicles."""
 
     vehicles: list[VehicleOut]
+
+
+class VehicleUpdate(BaseModel):
+    """Body of PUT /api/vehicles/{id}.
+
+    Every field is optional so a caller can send a subset, but an entirely
+    empty body is rejected: it almost always means the caller built the request
+    wrongly, and silently succeeding would hide that. Unknown keys such as
+    "id" are ignored, so the path alone decides which row is written.
+    """
+
+    make: ShortText | None = None
+    model: ShortText | None = None
+    category: ShortText | None = None
+    price: Price | None = None
+    quantity: StockQuantity | None = None
+
+    @model_validator(mode="after")
+    def _require_one_field(self) -> "VehicleUpdate":
+        if not self.changes():
+            raise ValueError("at least one field must be supplied")
+        return self
+
+    def changes(self) -> dict[str, Any]:
+        """The fields the caller actually sent, omitting those left out."""
+        return self.model_dump(exclude_none=True)
