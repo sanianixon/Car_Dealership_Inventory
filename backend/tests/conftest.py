@@ -24,7 +24,10 @@ def temp_db() -> Iterator[sessionmaker]:
     os.close(db_fd)
 
     engine = create_engine(
-        f"sqlite:///{db_path}", connect_args={"check_same_thread": False}
+        f"sqlite:///{db_path}",
+        # timeout: several connections contend for the write lock in the
+        # concurrency tests; without it SQLite gives up immediately.
+        connect_args={"check_same_thread": False, "timeout": 30},
     )
     Base.metadata.create_all(bind=engine)
 

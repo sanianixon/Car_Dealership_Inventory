@@ -94,12 +94,13 @@ def test_purchase_unknown_vehicle_is_404(client, auth):
     assert res.status_code == 404
 
 
-def test_concurrent_purchases_never_oversell(client, auth):
-    """The test this phase exists for.
+def test_only_one_caller_can_buy_the_last_unit(client, auth):
+    """Ten attempts at a single unit leave exactly one winner.
 
-    Ten callers try to buy the single unit in stock at the same time. A
-    read-then-write implementation lets several of them pass the stock check
-    before any of them writes, and the quantity goes negative.
+    This is an end-to-end check, not a concurrency one: TestClient drives the
+    app through a single blocking portal, so these requests are serialised and
+    a read-then-write implementation would pass this too. Real contention is
+    exercised in test_concurrency.py.
     """
     headers = auth()
     vehicle = _create(client, headers, quantity=1)
