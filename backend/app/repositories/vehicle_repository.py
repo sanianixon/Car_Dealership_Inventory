@@ -5,10 +5,25 @@ routes never touch a Session. Swapping the storage engine means rewriting this
 class and nothing above it.
 """
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.models import Vehicle
+
+# LIKE treats "%" and "_" as wildcards, so a user searching for "100%" would
+# otherwise match every row. They are escaped with a backslash, declared to
+# SQL via ESCAPE.
+_LIKE_ESCAPE = "\\"
+
+
+def _contains_pattern(value: str) -> str:
+    """Build a LIKE pattern matching `value` anywhere, wildcards disarmed."""
+    escaped = (
+        value.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2)
+        .replace("%", f"{_LIKE_ESCAPE}%")
+        .replace("_", f"{_LIKE_ESCAPE}_")
+    )
+    return f"%{escaped}%"
 
 
 class VehicleRepository:
@@ -43,3 +58,37 @@ class VehicleRepository:
         """Remove a vehicle from the catalogue."""
         self._db.delete(vehicle)
         self._db.commit()
+
+    def search(
+        self,
+        *,
+        make: str | None = None,
+        model: str | None = None,
+        category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
+    ) -> list[Vehicle]:
+        """Return the vehicles matching every supplied filter.
+
+        Values are bound as query parameters, never interpolated into the SQL
+        string, so no search term can alter the statement.
+        """
+        statement: Select = select(Vehicle)
+
+        for column, value in (
+            (Vehicle.make, make),
+            (Vehicle.model, model),
+            (Vehicle.category, category),
+        ):
+            if value:
+                statement = statement.where(
+                    column.ilike(_contains_pattern(value), escape=_LIKE_ESCAPE)
+                )
+
+        if min_price is not None:
+            statement = statement.where(Vehicle.price >= min_price)
+        if max_price is not None:
+            statement = statement.where(Vehicle.price <= max_price)
+
+        statement = statement.order_by(Vehicle.make, Vehicle.model)
+        return list(self._db.scalars(statement))

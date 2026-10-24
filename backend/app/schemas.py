@@ -164,3 +164,49 @@ class VehicleUpdate(BaseModel):
     def changes(self) -> dict[str, Any]:
         """The fields the caller actually sent, omitting those left out."""
         return self.model_dump(exclude_none=True)
+
+
+def _blank_to_none(value: Any) -> Any:
+    """Treat an empty or whitespace-only filter as absent.
+
+    A blank box in the search form must widen the results, not narrow them to
+    nothing, so it is dropped rather than matched against.
+    """
+    if isinstance(value, str):
+        return value.strip() or None
+    return value
+
+
+# The length limit is attached to the str branch, not to the union: applied to
+# "str | None" it would also be checked against None once a blank filter has
+# been dropped.
+SearchText = Annotated[
+    Annotated[str, Field(max_length=100)] | None, BeforeValidator(_blank_to_none)
+]
+
+
+class VehicleSearch(BaseModel):
+    """Query parameters for GET /api/vehicles/search.
+
+    Every filter is optional; those supplied are combined with AND.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    make: SearchText = None
+    model: SearchText = None
+    category: SearchText = None
+    min_price: float | None = Field(default=None, ge=0, alias="minPrice")
+    max_price: float | None = Field(default=None, ge=0, alias="maxPrice")
+
+    @model_validator(mode="after")
+    def _check_price_range(self) -> "VehicleSearch":
+        if (
+            self.min_price is not None
+            and self.max_price is not None
+            and self.min_price > self.max_price
+        ):
+            # An inverted range can only ever return nothing, so it is
+            # reported as a mistake instead of an empty result set.
+            raise ValueError("minPrice cannot be greater than maxPrice")
+        return self

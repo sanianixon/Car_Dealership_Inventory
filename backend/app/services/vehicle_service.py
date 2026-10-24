@@ -55,3 +55,21 @@ class VehicleService:
     def delete(self, vehicle_id: str) -> None:
         """Remove a vehicle, raising if the id is unknown."""
         self._repository.delete(self.get(vehicle_id))
+
+    def search(
+        self,
+        *,
+        make: str | None = None,
+        model: str | None = None,
+        category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
+    ) -> list[Vehicle]:
+        """Find vehicles matching the supplied filters, sold out or not."""
+        return self._repository.search(
+            make=make,
+            model=model,
+            category=category,
+            min_price=min_price,
+            max_price=max_price,
+        )
