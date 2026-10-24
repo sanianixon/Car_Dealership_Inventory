@@ -9,7 +9,7 @@ from typing import Any
 
 from app.models import Vehicle
 from app.repositories.vehicle_repository import VehicleRepository
-from app.services.exceptions import VehicleNotFoundError
+from app.services.lookup import require_vehicle
 
 
 class VehicleService:
@@ -36,10 +36,7 @@ class VehicleService:
 
     def get(self, vehicle_id: str) -> Vehicle:
         """Return one vehicle, or raise if the id is unknown."""
-        vehicle = self._repository.get(vehicle_id)
-        if vehicle is None:
-            raise VehicleNotFoundError()
-        return vehicle
+        return require_vehicle(self._repository, vehicle_id)
 
     def update(self, vehicle_id: str, changes: dict[str, Any]) -> Vehicle:
         """Apply a partial update to one vehicle.

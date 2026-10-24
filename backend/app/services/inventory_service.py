@@ -6,11 +6,8 @@ even when several buyers act at the same instant.
 
 from app.models import Vehicle
 from app.repositories.vehicle_repository import VehicleRepository
-from app.services.exceptions import (
-    InsufficientStockError,
-    OutOfStockError,
-    VehicleNotFoundError,
-)
+from app.services.exceptions import InsufficientStockError, OutOfStockError
+from app.services.lookup import require_vehicle
 
 
 class InventoryService:
@@ -20,10 +17,8 @@ class InventoryService:
         self._repository = repository
 
     def _require(self, vehicle_id: str) -> Vehicle:
-        vehicle = self._repository.get(vehicle_id)
-        if vehicle is None:
-            raise VehicleNotFoundError()
-        return vehicle
+        """Fetch a vehicle or raise, using the shared service-layer rule."""
+        return require_vehicle(self._repository, vehicle_id)
 
     def purchase(self, vehicle_id: str, quantity: int = 1) -> Vehicle:
         """Buy `quantity` units, or refuse if that many are not in stock.
