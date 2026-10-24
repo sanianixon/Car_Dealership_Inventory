@@ -104,3 +104,101 @@ def test_get_unknown_vehicle_is_404(client, auth):
 
     assert res.status_code == 404
     assert res.json()["error"]["message"]
+
+
+def _create(client, headers, **overrides) -> dict:
+    payload = {**VALID, **overrides}
+    return client.post("/api/vehicles", json=payload, headers=headers).json()["vehicle"]
+
+
+def test_update_changes_only_the_supplied_fields(client, auth):
+    headers = auth()
+    vehicle = _create(client, headers)
+
+    res = client.put(
+        f"/api/vehicles/{vehicle['id']}", json={"price": 17250.0}, headers=headers
+    )
+
+    assert res.status_code == 200
+    updated = res.json()["vehicle"]
+    assert updated["price"] == 17250.0
+    assert updated["make"] == vehicle["make"]
+    assert updated["quantity"] == vehicle["quantity"]
+
+
+def test_update_requires_at_least_one_field(client, auth):
+    headers = auth()
+    vehicle = _create(client, headers)
+
+    res = client.put(f"/api/vehicles/{vehicle['id']}", json={}, headers=headers)
+
+    assert res.status_code == 400
+
+
+def test_update_ignores_an_id_in_the_body(client, auth):
+    headers = auth()
+    vehicle = _create(client, headers)
+
+    res = client.put(
+        f"/api/vehicles/{vehicle['id']}",
+        json={"id": "hijacked", "category": "Hatchback"},
+        headers=headers,
+    )
+
+    assert res.status_code == 200
+    assert res.json()["vehicle"]["id"] == vehicle["id"]
+    assert res.json()["vehicle"]["category"] == "Hatchback"
+
+
+def test_update_rejects_an_invalid_price(client, auth):
+    headers = auth()
+    vehicle = _create(client, headers)
+
+    res = client.put(
+        f"/api/vehicles/{vehicle['id']}", json={"price": -5}, headers=headers
+    )
+
+    assert res.status_code == 400
+
+
+def test_update_unknown_vehicle_is_404(client, auth):
+    res = client.put(
+        "/api/vehicles/does-not-exist", json={"price": 100.0}, headers=auth()
+    )
+
+    assert res.status_code == 404
+
+
+def test_delete_requires_authentication(client, auth):
+    vehicle = _create(client, auth())
+
+    assert client.delete(f"/api/vehicles/{vehicle['id']}").status_code == 401
+
+
+def test_delete_is_forbidden_for_a_non_admin(client, auth):
+    headers = auth()
+    vehicle = _create(client, headers)
+
+    res = client.delete(f"/api/vehicles/{vehicle['id']}", headers=headers)
+
+    assert res.status_code == 403
+    # The vehicle must survive a rejected deletion.
+    assert client.get(f"/api/vehicles/{vehicle['id']}", headers=headers).status_code == 200
+
+
+def test_delete_as_admin_removes_the_vehicle(client, auth):
+    member = auth()
+    admin = auth(email="boss@dealership.com", admin=True)
+    vehicle = _create(client, member)
+
+    res = client.delete(f"/api/vehicles/{vehicle['id']}", headers=admin)
+
+    assert res.status_code == 204
+    assert res.content == b""
+    assert client.get(f"/api/vehicles/{vehicle['id']}", headers=member).status_code == 404
+
+
+def test_delete_unknown_vehicle_is_404_for_admin(client, auth):
+    admin = auth(email="boss@dealership.com", admin=True)
+
+    assert client.delete("/api/vehicles/nope", headers=admin).status_code == 404
