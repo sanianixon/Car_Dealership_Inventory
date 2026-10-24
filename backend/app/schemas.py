@@ -25,10 +25,17 @@ NormalisedEmail = Annotated[EmailStr, BeforeValidator(_normalise_email)]
 
 
 class RegisterRequest(BaseModel):
-    """Body of POST /api/auth/register."""
+    """Body of POST /api/auth/register.
+
+    Note what is absent: there is no role field. The role is derived from the
+    invite code server-side, so a caller cannot ask to be an administrator.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
 
     email: NormalisedEmail
     password: str = Field(min_length=8, max_length=72)
+    admin_code: str | None = Field(default=None, alias="adminCode")
 
 
 class UserOut(BaseModel):
@@ -64,4 +71,10 @@ class LoginResponse(BaseModel):
     """Envelope returned by a successful login."""
 
     token: str
+    user: UserOut
+
+
+class MeResponse(BaseModel):
+    """Envelope returned by GET /api/auth/me."""
+
     user: UserOut
