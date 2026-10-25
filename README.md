@@ -1,11 +1,13 @@
 # Car Dealership Inventory System
 
+[![CI](https://github.com/sanianixon/incubyte/actions/workflows/ci.yml/badge.svg)](https://github.com/sanianixon/incubyte/actions/workflows/ci.yml)
+
 A full-stack vehicle inventory system: a token-authenticated REST API over a real
 database, and a React single-page app for browsing, searching and buying stock.
 
-Built test-first for the Incubyte TDD kata. **74 backend tests, 99% statement
-coverage**, and a commit history of 9 RED / 9 GREEN / 2 refactor steps that shows
-how the code actually got here.
+Built test-first for the Incubyte TDD kata. **109 tests — 74 on the backend at
+99% statement coverage, 35 on the frontend** — and a commit history of 9 RED /
+9 GREEN / 2 refactor steps that shows how the code actually got here.
 
 ---
 
@@ -44,8 +46,9 @@ how the code actually got here.
 | API | Python 3.11, FastAPI 0.162, SQLAlchemy 2.1 |
 | Database | SQLite file (a real database on disk, not in-memory) |
 | Auth | JWT (PyJWT, HS256) with bcrypt password hashing |
-| Tests | pytest 9.1 + pytest-cov, 74 tests |
 | Frontend | React 19, TypeScript, Vite 7, Tailwind CSS v4 |
+| Backend tests | pytest 9.1 + pytest-cov — 74 tests, 99% coverage |
+| Frontend tests | Vitest 3.2 + Testing Library + jsdom — 35 tests |
 
 ## Running it locally
 
@@ -106,6 +109,8 @@ Every variable has a working default for local development.
 
 ## Running the tests
 
+Backend:
+
 ```bash
 cd backend
 source venv/bin/activate
@@ -113,8 +118,17 @@ pytest -v                                      # 74 tests
 pytest --cov=app --cov-report=term-missing     # coverage
 ```
 
-The committed output of that command is in
-[`docs/test-report.txt`](docs/test-report.txt).
+Frontend:
+
+```bash
+cd frontend
+npm test                                       # 35 tests
+npm run test:coverage                          # coverage
+```
+
+Both run on every push — see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). The committed output of
+the backend command is in [`docs/test-report.txt`](docs/test-report.txt).
 
 ```
 74 passed
@@ -135,7 +149,7 @@ deliberately rather than padded with hollow tests.
 | ![Search](docs/screenshots/03-search.png) | ![Sold out](docs/screenshots/04-sold-out.png) |
 | **Search** — filters combine with AND | **Sold out** — Purchase is disabled at zero stock |
 | ![Admin](docs/screenshots/05-admin-edit.png) | ![Coverage](docs/screenshots/06-coverage.png) |
-| **Admin** — add, edit, delete and restock | **Coverage** — 74 tests, 99% |
+| **Admin** — add, edit, delete and restock | **Coverage** — backend, 74 tests at 99% |
 
 ## Architecture
 
@@ -293,16 +307,35 @@ for `'; DROP TABLE vehicles; --` and checking the table survives.
 | `test_errors.py` | 3 | The uniform error envelope |
 | `test_concurrency.py` | 2 | Overselling under real contention |
 
-Every test gets its own temporary SQLite file, so no test can leak state into
-another.
+Every backend test gets its own temporary SQLite file, so no test can leak state
+into another.
+
+On the frontend:
+
+| File | Tests | Focus |
+| --- | --- | --- |
+| `VehicleCard.test.tsx` | 11 | Purchase disabled at zero stock, stock wording, admin controls hidden from buyers |
+| `api.test.ts` | 10 | Bearer token, error envelope to `ApiError`, blank filters dropped, 204 handling |
+| `AuthScreen.test.tsx` | 7 | Server messages surfaced, field errors beside their field, admin code handling |
+| `SearchBar.test.tsx` | 7 | Filters preserved per keystroke, whitespace treated as unfiltered |
+
+The disabled-button test was checked by removing the `soldOut` guard from the
+component and confirming three tests failed, rather than trusting a green run.
+That mattered: without the guard the button still *looked* sold out — greyed,
+muted, with an explanatory tooltip — and clicking it bought a car with no stock.
+A screenshot would have looked entirely correct.
 
 ## Known limitations
 
 Stated rather than hidden; each is a deliberate trade for a kata-sized project.
 
-- **No frontend tests.** The UI is covered by TypeScript, ESLint and manual
-  checking only. All 74 tests are backend. The brief emphasises TDD for backend
-  logic, and that is where the effort went.
+- **Frontend test coverage is narrower than the backend's.** The card, the API
+  client and the forms are tested; `Dashboard.tsx`, which orchestrates loading,
+  searching and the write operations, is covered only by TypeScript, ESLint and
+  manual checking. It is the component most worth testing next.
+- **No end-to-end tests.** Backend and frontend are each tested in isolation.
+  The two were checked against each other by hand and with a scripted pass over
+  the live API, not by an automated browser test.
 - **The token lives in `localStorage`**, so any XSS on the origin can read it.
   An httpOnly cookie with CSRF protection would be the production answer.
 - **Prices are floats.** Fine here; production money should be integer minor
@@ -390,7 +423,7 @@ backend/
     services/          vehicle_service, inventory_service, exceptions, lookup
     repositories/      vehicle_repository (all SQL)
   scripts/seed.py      idempotent admin + starter catalogue
-  tests/               74 tests
+  tests/               74 tests, including test_concurrency.py
 frontend/
   src/
     api.ts             the only module that calls the API

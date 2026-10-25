@@ -93,14 +93,25 @@ describe("error handling", () => {
       }),
     );
 
-    const caught = await api
-      .createVehicle({ make: "", model: "X", category: "Y", price: -1, quantity: 1 })
-      .catch((error: unknown) => error as ApiError);
+    // Caught into a typed variable rather than via .catch(), which would widen
+    // the result to a union with the success value and hide fieldError.
+    let caught: ApiError | undefined;
+    try {
+      await api.createVehicle({
+        make: "",
+        model: "X",
+        category: "Y",
+        price: -1,
+        quantity: 1,
+      });
+    } catch (error) {
+      caught = error as ApiError;
+    }
 
     expect(caught).toBeInstanceOf(ApiError);
-    expect(caught.fieldError("price")).toBe("cannot be negative");
-    expect(caught.fieldError("make")).toBe("must not be blank");
-    expect(caught.fieldError("quantity")).toBeUndefined();
+    expect(caught?.fieldError("price")).toBe("cannot be negative");
+    expect(caught?.fieldError("make")).toBe("must not be blank");
+    expect(caught?.fieldError("quantity")).toBeUndefined();
   });
 
   it("still reports a failure when the body is not the expected envelope", async () => {
