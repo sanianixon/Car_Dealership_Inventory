@@ -202,3 +202,44 @@ def test_delete_unknown_vehicle_is_404_for_admin(client, auth):
     admin = auth(email="boss@dealership.com", admin=True)
 
     assert client.delete("/api/vehicles/nope", headers=admin).status_code == 404
+
+
+def test_adding_a_vehicle_is_forbidden_for_a_non_admin(client, auth):
+    """Managing the catalogue is staff work, whatever the UI chooses to show.
+
+    A buyer must not be able to add stock to the dealership by calling the API
+    directly. Hiding the button is presentation, not a permission.
+    """
+    res = client.post("/api/vehicles", json=VALID, headers=auth())
+
+    assert res.status_code == 403
+
+
+def test_editing_a_vehicle_is_forbidden_for_a_non_admin(client, auth):
+    admin = auth(email="boss@dealership.com", admin=True)
+    buyer = auth()
+    vehicle = _create(client, admin)
+
+    res = client.put(
+        f"/api/vehicles/{vehicle['id']}", json={"price": 1.0}, headers=buyer
+    )
+
+    assert res.status_code == 403
+    # The rejected edit must not have changed anything.
+    unchanged = client.get(f"/api/vehicles/{vehicle['id']}", headers=buyer).json()
+    assert unchanged["vehicle"]["price"] == VALID["price"]
+
+
+def test_an_admin_may_add_and_edit(client, auth):
+    admin = auth(email="boss@dealership.com", admin=True)
+
+    created = client.post("/api/vehicles", json=VALID, headers=admin)
+    assert created.status_code == 201
+
+    updated = client.put(
+        f"/api/vehicles/{created.json()['vehicle']['id']}",
+        json={"price": 17000.0},
+        headers=admin,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["vehicle"]["price"] == 17000.0
