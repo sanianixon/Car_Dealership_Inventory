@@ -57,13 +57,22 @@ Built test-first for the Incubyte TDD kata. **143 tests — 95 on the backend at
 
 ## Running it locally
 
-Verified from a fresh clone on macOS with Python 3.11.7 and Node 22.14.
+Verified by cloning this repository fresh and following these steps.
+
+### Prerequisites
+
+- **Python 3.11 or newer.** Check with `python3 --version`. On 3.9 or 3.10 the
+  install fails with a confusing message about `annotated-types`, because the
+  pinned dependencies have no build for those versions, and the code uses
+  `X | None` annotations at runtime. If your `python3` is older, use an explicit
+  interpreter below (`python3.11 -m venv venv`).
+- **Node 20 or newer.** Check with `node --version`.
 
 ### 1. Backend
 
 ```bash
 cd backend
-python3 -m venv venv
+python3 -m venv venv              # or: python3.11 -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
@@ -153,8 +162,8 @@ deliberately rather than padded with hollow tests.
 | **Sign in** — register and login share one card | **Dashboard** — the catalogue, ordered by make |
 | ![Search](docs/screenshots/03-search.png) | ![Sold out](docs/screenshots/04-sold-out.png) |
 | **Search** — filters combine with AND | **Sold out** — Purchase is disabled at zero stock |
-| ![Admin](docs/screenshots/05-admin-edit.png) | ![Coverage](docs/screenshots/06-coverage.png) |
-| **Admin** — add, edit, delete and restock | **Coverage** — backend, 95 tests at 99% |
+| ![Model page](docs/screenshots/05-model-page.png) | ![Coverage](docs/screenshots/06-coverage.png) |
+| **A model's own page** — the actual cars, each bought on its own | **Coverage** — backend, 95 tests at 99% |
 
 ## Architecture
 
@@ -436,18 +445,41 @@ transcripts by [`docs/make_prompts.py`](docs/make_prompts.py). That script is
 committed deliberately: it means "unedited" is checkable rather than merely
 claimed, since anyone can re-run it and compare.
 
-**How it was used — accurately.** Claude wrote the great majority of the code in
-this repository: the FastAPI application, the test suite, the seed script and the
-whole React frontend. It worked one red/green step at a time, and I ran the tests
-and made every commit myself.
+**The division of labour.** Claude wrote most of the code in this repository:
+the FastAPI application, the test suite, the seed script and the React
+frontend, one red/green step at a time. I ran the tests and made every commit
+myself. What I want to be judged on is not that — it is the decisions, because
+those are what the code is *for*, and they were mine.
 
-**What I did.** I set the direction and made the decisions: the stack, the
-working method, the scope (a thoroughly tested backend over a leaner frontend),
-how far to go on the frontend, and how to handle the disclosure questions below.
-I reviewed each step before committing it, ran the suite at every step, drove the
-application by hand in the browser, and verified the deliverables. Where Claude
-proposed something I disagreed with, or produced something that did not hold up,
-we changed it.
+**The decisions I made, and why.**
+
+- **A listing is not a car.** The first version followed the brief literally: a
+  vehicle row with a `quantity`. When provenance fields were added it put a
+  build year, a colour and an owner count on that row, and the dashboard then
+  showed four Honda Citys all built in the same year, the same colour, with the
+  same owner. I stopped the work and said that made no sense — four cars on a
+  forecourt are four different cars. That became the two-level model this
+  project now runs on, and it is the change I would most want to talk about.
+  It also meant accepting a deliberate divergence from the brief, which I
+  decided was worth it and documented rather than hid.
+- **Inventory management is admin-only throughout.** `POST` and `PUT` were left
+  open to any signed-in user on a literal reading of the brief. I judged that
+  wrong: the UI already hid those controls from buyers, so the only thing
+  stopping a buyer adding stock was a hidden button. Tightening it broke 35
+  tests, which turned out to be worth knowing.
+- **The interface was generic.** The first version worked and looked like every
+  other generated dashboard — centred card, rounded corners, teal accent. I
+  said so, chose the direction for the redesign, and reviewed each pass.
+- **Scope.** A thoroughly tested backend over a broad shallow one; how far to
+  take the frontend; when to stop adding features.
+- **Honesty under pressure.** I asked at one point whether the AI co-author
+  trailers could come off. They could have; I left them on. When one commit
+  lost its trailer to a broken terminal paste, I chose to record the omission
+  rather than rewrite pushed history to look tidier.
+- **Verification.** Claude has no browser, so every judgement about whether the
+  application actually worked was mine: I drove it by hand, took the
+  screenshots, and more than once sent back something that was wrong on screen
+  while passing its tests.
 
 **What AI got wrong, and how it surfaced.** This is the part I found most
 instructive.
@@ -476,15 +508,22 @@ that line, which is also what jammed the shell. Its body still states the AI
 involvement in prose. Rather than rewrite already-pushed history over one line, I
 chose to record the omission — in commit `ddf5810`, and here.
 
-**Reflection.** AI made this dramatically faster, and the speed was the risk
-rather than the benefit. It produces plausible work at a rate that outpaces
-review, and the two worst moments were both cases of a green signal that meant
-nothing: a test that could not fail, and commits that were never made. What
-helped was insisting on evidence instead of confirmation — break the
-implementation and watch the test catch it, read `git log` instead of trusting
-"done", run the API against a real server rather than only the test client. I
-would use it the same way again, with the same scepticism about anything that
-reports success.
+**Reflection.** The useful lesson was not that AI is fast. It is that speed is
+the risk: it produces plausible work faster than anyone can review it, and
+every bad moment in this project was a green signal that meant nothing — a test
+that could not fail, commits that were never made, a type check that checked no
+files, a CI step asserting on a print statement. None of those were caught by
+reading the code more carefully. They were caught by insisting on evidence:
+break the implementation and watch the test catch it, read `git log` instead of
+trusting "done", run the API against a real server rather than only the test
+client.
+
+The other lesson is about where the work actually is. The code was the cheap
+part. Deciding that a listing is not a car, that a permission enforced in the
+interface is not a permission, that an interface which merely works is not
+finished — none of that came out of a prompt, and none of it would have been
+caught by a faster model. That is the part I would bring to a team, and the
+part I would want to be asked about.
 
 ---
 
