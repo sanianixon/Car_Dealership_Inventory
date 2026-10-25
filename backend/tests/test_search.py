@@ -8,9 +8,9 @@ FLEET = [
 ]
 
 
-def _seed(client, headers) -> None:
+def _seed(add_vehicle) -> None:
     for vehicle in FLEET:
-        client.post("/api/vehicles", json=vehicle, headers=headers)
+        add_vehicle(**vehicle)
 
 
 def _search(client, headers, **params):
@@ -25,9 +25,9 @@ def test_search_requires_authentication(client):
     assert client.get("/api/vehicles/search").status_code == 401
 
 
-def test_search_by_make_is_case_insensitive_and_partial(client, auth):
+def test_search_by_make_is_case_insensitive_and_partial(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     res = _search(client, headers, make="toyo")
 
@@ -35,71 +35,67 @@ def test_search_by_make_is_case_insensitive_and_partial(client, auth):
     assert _models(res) == {"Corolla", "RAV4"}
 
 
-def test_search_by_category(client, auth):
+def test_search_by_category(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     assert _models(_search(client, headers, category="sedan")) == {"Corolla", "Civic"}
 
 
-def test_price_bounds_are_inclusive(client, auth):
+def test_price_bounds_are_inclusive(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     res = _search(client, headers, minPrice=18500, maxPrice=22000)
 
     assert _models(res) == {"Corolla", "Civic"}
 
 
-def test_filters_combine_with_and(client, auth):
+def test_filters_combine_with_and(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     res = _search(client, headers, make="toyota", category="suv")
 
     assert _models(res) == {"RAV4"}
 
 
-def test_blank_filters_are_ignored(client, auth):
+def test_blank_filters_are_ignored(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     res = _search(client, headers, make="", model="   ", category="")
 
     assert _models(res) == {v["model"] for v in FLEET}
 
 
-def test_no_filters_returns_everything(client, auth):
+def test_no_filters_returns_everything(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     assert _models(_search(client, headers)) == {v["model"] for v in FLEET}
 
 
-def test_min_price_above_max_price_is_rejected(client, auth):
+def test_min_price_above_max_price_is_rejected(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     res = _search(client, headers, minPrice=30000, maxPrice=10000)
 
     assert res.status_code == 400
 
 
-def test_search_includes_sold_out_vehicles(client, auth):
+def test_search_includes_sold_out_vehicles(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     assert _models(_search(client, headers, make="ford")) == {"F-150"}
 
 
-def test_wildcard_characters_are_matched_literally(client, auth):
+def test_wildcard_characters_are_matched_literally(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
-    client.post(
-        "/api/vehicles",
-        json={**FLEET[0], "make": "100%_Electric", "model": "Bolt"},
-        headers=headers,
-    )
+    _seed(add_vehicle)
+    add_vehicle(**{**FLEET[0], "make": "100%_Electric", "model": "Bolt"})
 
     # In SQL LIKE, "%" and "_" are wildcards. Unescaped, this query would
     # match every vehicle instead of the one whose name contains the literal
@@ -109,9 +105,9 @@ def test_wildcard_characters_are_matched_literally(client, auth):
     assert _models(res) == {"Bolt"}
 
 
-def test_underscore_is_not_a_single_character_wildcard(client, auth):
+def test_underscore_is_not_a_single_character_wildcard(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     # "_" would match any one character, so unescaped this returns Toyota rows.
     res = _search(client, headers, make="T_yota")
@@ -119,9 +115,9 @@ def test_underscore_is_not_a_single_character_wildcard(client, auth):
     assert _models(res) == set()
 
 
-def test_sql_injection_attempt_is_inert(client, auth):
+def test_sql_injection_attempt_is_inert(client, auth, add_vehicle):
     headers = auth()
-    _seed(client, headers)
+    _seed(add_vehicle)
 
     res = _search(client, headers, make="'; DROP TABLE vehicles; --")
 

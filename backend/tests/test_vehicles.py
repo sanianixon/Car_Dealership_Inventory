@@ -1,4 +1,11 @@
-"""Tests for creating, listing and fetching vehicles."""
+"""Tests for creating, listing, fetching, updating and deleting vehicles.
+
+Managing the catalogue is staff work, so create, update and delete all require
+an administrator. Tests that merely need a vehicle to exist use the add_vehicle
+fixture, which writes the row directly: setting a fixture up through
+POST /api/vehicles would make those tests depend on the permissions of an
+endpoint they are not testing.
+"""
 
 VALID = {
     "make": "Toyota",
@@ -18,7 +25,7 @@ def test_listing_vehicles_requires_authentication(client):
 
 
 def test_create_returns_the_stored_vehicle(client, auth):
-    res = client.post("/api/vehicles", json=VALID, headers=auth())
+    res = client.post("/api/vehicles", json=VALID, headers=auth(admin=True))
 
     assert res.status_code == 201
     vehicle = res.json()["vehicle"]
@@ -32,7 +39,7 @@ def test_create_returns_the_stored_vehicle(client, auth):
 
 def test_create_rejects_a_negative_price(client, auth):
     res = client.post(
-        "/api/vehicles", json={**VALID, "price": -1}, headers=auth()
+        "/api/vehicles", json={**VALID, "price": -1}, headers=auth(admin=True)
     )
 
     assert res.status_code == 400
@@ -41,7 +48,7 @@ def test_create_rejects_a_negative_price(client, auth):
 
 def test_create_rejects_a_price_sent_as_a_string(client, auth):
     res = client.post(
-        "/api/vehicles", json={**VALID, "price": "18500"}, headers=auth()
+        "/api/vehicles", json={**VALID, "price": "18500"}, headers=auth(admin=True)
     )
 
     assert res.status_code == 400
@@ -49,7 +56,7 @@ def test_create_rejects_a_price_sent_as_a_string(client, auth):
 
 def test_create_rejects_a_fractional_quantity(client, auth):
     res = client.post(
-        "/api/vehicles", json={**VALID, "quantity": 1.5}, headers=auth()
+        "/api/vehicles", json={**VALID, "quantity": 1.5}, headers=auth(admin=True)
     )
 
     assert res.status_code == 400
@@ -57,7 +64,7 @@ def test_create_rejects_a_fractional_quantity(client, auth):
 
 def test_create_rejects_a_negative_quantity(client, auth):
     res = client.post(
-        "/api/vehicles", json={**VALID, "quantity": -2}, headers=auth()
+        "/api/vehicles", json={**VALID, "quantity": -2}, headers=auth(admin=True)
     )
 
     assert res.status_code == 400
@@ -65,22 +72,20 @@ def test_create_rejects_a_negative_quantity(client, auth):
 
 def test_create_rejects_blank_text_fields(client, auth):
     res = client.post(
-        "/api/vehicles", json={**VALID, "make": "   "}, headers=auth()
+        "/api/vehicles", json={**VALID, "make": "   "}, headers=auth(admin=True)
     )
 
     assert res.status_code == 400
 
 
-def test_list_includes_sold_out_vehicles_sorted_by_make_then_model(client, auth):
-    headers = auth()
-    for payload in [
-        {**VALID, "make": "Honda", "model": "Civic"},
-        {**VALID, "make": "Toyota", "model": "Yaris"},
-        {**VALID, "make": "Toyota", "model": "Camry", "quantity": 0},
-    ]:
-        client.post("/api/vehicles", json=payload, headers=headers)
+def test_list_includes_sold_out_vehicles_sorted_by_make_then_model(
+    client, auth, add_vehicle
+):
+    add_vehicle(make="Honda", model="Civic")
+    add_vehicle(make="Toyota", model="Yaris")
+    add_vehicle(make="Toyota", model="Camry", quantity=0)
 
-    res = client.get("/api/vehicles", headers=headers)
+    res = client.get("/api/vehicles", headers=auth())
 
     assert res.status_code == 200
     listed = [(v["make"], v["model"]) for v in res.json()["vehicles"]]
@@ -89,14 +94,13 @@ def test_list_includes_sold_out_vehicles_sorted_by_make_then_model(client, auth)
     assert listed == [("Honda", "Civic"), ("Toyota", "Camry"), ("Toyota", "Yaris")]
 
 
-def test_get_one_vehicle_by_id(client, auth):
-    headers = auth()
-    created = client.post("/api/vehicles", json=VALID, headers=headers).json()["vehicle"]
+def test_get_one_vehicle_by_id(client, auth, add_vehicle):
+    vehicle = add_vehicle()
 
-    res = client.get(f"/api/vehicles/{created['id']}", headers=headers)
+    res = client.get(f"/api/vehicles/{vehicle['id']}", headers=auth())
 
     assert res.status_code == 200
-    assert res.json()["vehicle"]["id"] == created["id"]
+    assert res.json()["vehicle"]["id"] == vehicle["id"]
 
 
 def test_get_unknown_vehicle_is_404(client, auth):
@@ -106,17 +110,13 @@ def test_get_unknown_vehicle_is_404(client, auth):
     assert res.json()["error"]["message"]
 
 
-def _create(client, headers, **overrides) -> dict:
-    payload = {**VALID, **overrides}
-    return client.post("/api/vehicles", json=payload, headers=headers).json()["vehicle"]
-
-
-def test_update_changes_only_the_supplied_fields(client, auth):
-    headers = auth()
-    vehicle = _create(client, headers)
+def test_update_changes_only_the_supplied_fields(client, auth, add_vehicle):
+    vehicle = add_vehicle()
 
     res = client.put(
-        f"/api/vehicles/{vehicle['id']}", json={"price": 17250.0}, headers=headers
+        f"/api/vehicles/{vehicle['id']}",
+        json={"price": 17250.0},
+        headers=auth(admin=True),
     )
 
     assert res.status_code == 200
@@ -126,23 +126,23 @@ def test_update_changes_only_the_supplied_fields(client, auth):
     assert updated["quantity"] == vehicle["quantity"]
 
 
-def test_update_requires_at_least_one_field(client, auth):
-    headers = auth()
-    vehicle = _create(client, headers)
+def test_update_requires_at_least_one_field(client, auth, add_vehicle):
+    vehicle = add_vehicle()
 
-    res = client.put(f"/api/vehicles/{vehicle['id']}", json={}, headers=headers)
+    res = client.put(
+        f"/api/vehicles/{vehicle['id']}", json={}, headers=auth(admin=True)
+    )
 
     assert res.status_code == 400
 
 
-def test_update_ignores_an_id_in_the_body(client, auth):
-    headers = auth()
-    vehicle = _create(client, headers)
+def test_update_ignores_an_id_in_the_body(client, auth, add_vehicle):
+    vehicle = add_vehicle()
 
     res = client.put(
         f"/api/vehicles/{vehicle['id']}",
         json={"id": "hijacked", "category": "Hatchback"},
-        headers=headers,
+        headers=auth(admin=True),
     )
 
     assert res.status_code == 200
@@ -150,12 +150,11 @@ def test_update_ignores_an_id_in_the_body(client, auth):
     assert res.json()["vehicle"]["category"] == "Hatchback"
 
 
-def test_update_rejects_an_invalid_price(client, auth):
-    headers = auth()
-    vehicle = _create(client, headers)
+def test_update_rejects_an_invalid_price(client, auth, add_vehicle):
+    vehicle = add_vehicle()
 
     res = client.put(
-        f"/api/vehicles/{vehicle['id']}", json={"price": -5}, headers=headers
+        f"/api/vehicles/{vehicle['id']}", json={"price": -5}, headers=auth(admin=True)
     )
 
     assert res.status_code == 400
@@ -163,21 +162,23 @@ def test_update_rejects_an_invalid_price(client, auth):
 
 def test_update_unknown_vehicle_is_404(client, auth):
     res = client.put(
-        "/api/vehicles/does-not-exist", json={"price": 100.0}, headers=auth()
+        "/api/vehicles/does-not-exist",
+        json={"price": 100.0},
+        headers=auth(admin=True),
     )
 
     assert res.status_code == 404
 
 
-def test_delete_requires_authentication(client, auth):
-    vehicle = _create(client, auth())
+def test_delete_requires_authentication(client, add_vehicle):
+    vehicle = add_vehicle()
 
     assert client.delete(f"/api/vehicles/{vehicle['id']}").status_code == 401
 
 
-def test_delete_is_forbidden_for_a_non_admin(client, auth):
+def test_delete_is_forbidden_for_a_non_admin(client, auth, add_vehicle):
     headers = auth()
-    vehicle = _create(client, headers)
+    vehicle = add_vehicle()
 
     res = client.delete(f"/api/vehicles/{vehicle['id']}", headers=headers)
 
@@ -186,10 +187,10 @@ def test_delete_is_forbidden_for_a_non_admin(client, auth):
     assert client.get(f"/api/vehicles/{vehicle['id']}", headers=headers).status_code == 200
 
 
-def test_delete_as_admin_removes_the_vehicle(client, auth):
+def test_delete_as_admin_removes_the_vehicle(client, auth, add_vehicle):
     member = auth()
     admin = auth(email="boss@dealership.com", admin=True)
-    vehicle = _create(client, member)
+    vehicle = add_vehicle()
 
     res = client.delete(f"/api/vehicles/{vehicle['id']}", headers=admin)
 
@@ -215,10 +216,9 @@ def test_adding_a_vehicle_is_forbidden_for_a_non_admin(client, auth):
     assert res.status_code == 403
 
 
-def test_editing_a_vehicle_is_forbidden_for_a_non_admin(client, auth):
-    admin = auth(email="boss@dealership.com", admin=True)
+def test_editing_a_vehicle_is_forbidden_for_a_non_admin(client, auth, add_vehicle):
     buyer = auth()
-    vehicle = _create(client, admin)
+    vehicle = add_vehicle()
 
     res = client.put(
         f"/api/vehicles/{vehicle['id']}", json={"price": 1.0}, headers=buyer

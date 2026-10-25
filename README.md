@@ -5,7 +5,7 @@
 A full-stack vehicle inventory system: a token-authenticated REST API over a real
 database, and a React single-page app for browsing, searching and buying stock.
 
-Built test-first for the Incubyte TDD kata. **109 tests — 74 on the backend at
+Built test-first for the Incubyte TDD kata. **112 tests — 77 on the backend at
 99% statement coverage, 35 on the frontend** — and a commit history of 9 RED /
 9 GREEN / 2 refactor steps that shows how the code actually got here.
 
@@ -47,7 +47,7 @@ Built test-first for the Incubyte TDD kata. **109 tests — 74 on the backend at
 | Database | SQLite file (a real database on disk, not in-memory) |
 | Auth | JWT (PyJWT, HS256) with bcrypt password hashing |
 | Frontend | React 19, TypeScript, Vite 7, Tailwind CSS v4 |
-| Backend tests | pytest 9.1 + pytest-cov — 74 tests, 99% coverage |
+| Backend tests | pytest 9.1 + pytest-cov — 77 tests, 99% coverage |
 | Frontend tests | Vitest 3.2 + Testing Library + jsdom — 35 tests |
 
 ## Running it locally
@@ -114,7 +114,7 @@ Backend:
 ```bash
 cd backend
 source venv/bin/activate
-pytest -v                                      # 74 tests
+pytest -v                                      # 77 tests
 pytest --cov=app --cov-report=term-missing     # coverage
 ```
 
@@ -131,7 +131,7 @@ Both run on every push — see
 the backend command is in [`docs/test-report.txt`](docs/test-report.txt).
 
 ```
-74 passed
+77 passed
 TOTAL   449 statements   6 missed   99% coverage
 ```
 
@@ -149,7 +149,7 @@ deliberately rather than padded with hollow tests.
 | ![Search](docs/screenshots/03-search.png) | ![Sold out](docs/screenshots/04-sold-out.png) |
 | **Search** — filters combine with AND | **Sold out** — Purchase is disabled at zero stock |
 | ![Admin](docs/screenshots/05-admin-edit.png) | ![Coverage](docs/screenshots/06-coverage.png) |
-| **Admin** — add, edit, delete and restock | **Coverage** — backend, 74 tests at 99% |
+| **Admin** — add, edit, delete and restock | **Coverage** — backend, 77 tests at 99% |
 
 ## Architecture
 
@@ -190,8 +190,8 @@ All paths are under `/api`. Every route except register and login needs
 | GET | `/vehicles` | user | | `200 {vehicles}` |
 | GET | `/vehicles/search` | user | query: `make, model, category, minPrice, maxPrice` | `200 {vehicles}` |
 | GET | `/vehicles/{id}` | user | | `200 {vehicle}` |
-| POST | `/vehicles` | user | `{make, model, category, price, quantity}` | `201 {vehicle}` |
-| PUT | `/vehicles/{id}` | user | any subset of the above | `200 {vehicle}` |
+| POST | `/vehicles` | **admin** | `{make, model, category, price, quantity}` | `201 {vehicle}` |
+| PUT | `/vehicles/{id}` | **admin** | any subset of the above | `200 {vehicle}` |
 | DELETE | `/vehicles/{id}` | **admin** | | `204` |
 | POST | `/vehicles/{id}/purchase` | user | `{quantity?}` (default 1) | `200 {vehicle, purchased}` |
 | POST | `/vehicles/{id}/restock` | **admin** | `{quantity}` | `200 {vehicle, restocked}` |
@@ -279,10 +279,14 @@ for `'; DROP TABLE vehicles; --` and checking the table survives.
 - **Sold-out vehicles are listed.** "All available vehicles" is read as the
   whole catalogue, because the dashboard needs the sold-out ones in order to
   show a disabled Purchase button at all.
-- **`POST` and `PUT /vehicles` are open to any signed-in user.** The brief marks
-  only `DELETE` and restock as admin-only, so that literal reading is what the
-  API enforces, while the UI shows those controls to administrators only. One
-  line in each route would tighten it.
+- **Changing the catalogue is admin-only throughout**, not just for `DELETE` and
+  restock. The brief marks only those two explicitly, and `POST`/`PUT` were at
+  first left open to any signed-in user on that reading. That was wrong, for a
+  reason worth recording: the UI already showed add and edit to administrators
+  only, so the sole thing stopping a buyer adding stock to the dealership was a
+  hidden button. A permission enforced in the interface is not a permission.
+  This README asserted both positions at once before anyone noticed. Now the
+  guard is on the route and three tests hold it there.
 - **Constraints live in the database too.** `CHECK (quantity >= 0)` and
   `CHECK (price >= 0)` back up the request schemas, because validation protects
   the API while constraints protect the data from every other writer.
@@ -298,7 +302,7 @@ for `'; DROP TABLE vehicles; --` and checking the table survives.
 
 | File | Tests | Focus |
 | --- | --- | --- |
-| `test_vehicles.py` | 20 | CRUD, validation, admin-only delete |
+| `test_vehicles.py` | 23 | CRUD, validation, admin-only create/edit/delete |
 | `test_inventory.py` | 14 | Purchase and restock rules |
 | `test_search.py` | 12 | Filters, price bounds, LIKE escaping, injection |
 | `test_auth.py` | 8 | Registration, duplicates, login, JWT claims |
@@ -423,7 +427,7 @@ backend/
     services/          vehicle_service, inventory_service, exceptions, lookup
     repositories/      vehicle_repository (all SQL)
   scripts/seed.py      idempotent admin + starter catalogue
-  tests/               74 tests, including test_concurrency.py
+  tests/               77 tests, including test_concurrency.py
 frontend/
   src/
     api.ts             the only module that calls the API

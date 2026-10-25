@@ -71,6 +71,44 @@ def db(temp_db: sessionmaker) -> Iterator[Session]:
 
 
 @pytest.fixture()
+def add_vehicle(db):
+    """Factory putting a vehicle straight into the database.
+
+    Test fixtures are built here rather than through POST /api/vehicles so that
+    a test needing stock to exist does not also depend on who is allowed to
+    create it. Tests of the create endpoint itself still go through the API.
+
+    Returns the vehicle as a dict, matching what the API would return, so a
+    test can read vehicle["id"] either way.
+    """
+    from app.models import Vehicle
+
+    defaults = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "category": "Sedan",
+        "price": 18500.0,
+        "quantity": 4,
+    }
+
+    def _add(**overrides) -> dict:
+        vehicle = Vehicle(**{**defaults, **overrides})
+        db.add(vehicle)
+        db.commit()
+        db.refresh(vehicle)
+        return {
+            "id": vehicle.id,
+            "make": vehicle.make,
+            "model": vehicle.model,
+            "category": vehicle.category,
+            "price": vehicle.price,
+            "quantity": vehicle.quantity,
+        }
+
+    return _add
+
+
+@pytest.fixture()
 def auth(client, db):
     """Factory for Authorization headers.
 

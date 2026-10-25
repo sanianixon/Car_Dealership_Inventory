@@ -1,7 +1,7 @@
 """Vehicle catalogue routes.
 
-Every route here requires a signed-in caller. Deletion additionally requires
-an administrator.
+Reading the catalogue requires a signed-in caller. Changing it - adding,
+editing, deleting or restocking - requires an administrator.
 
 Route order matters: "/search" is declared before "/{vehicle_id}", otherwise
 the dynamic route matches first and the request is treated as a lookup for a
@@ -40,9 +40,9 @@ router = APIRouter(prefix="/api/vehicles", tags=["vehicles"])
 def create_vehicle(
     payload: VehicleCreate,
     service: VehicleService = Depends(get_vehicle_service),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ) -> VehicleResponse:
-    """Add a vehicle to the catalogue."""
+    """Add a vehicle to the catalogue. Administrators only."""
     vehicle = service.create(
         make=payload.make,
         model=payload.model,
@@ -94,9 +94,9 @@ def update_vehicle(
     vehicle_id: str,
     payload: VehicleUpdate,
     service: VehicleService = Depends(get_vehicle_service),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ) -> VehicleResponse:
-    """Apply a partial update to a vehicle."""
+    """Apply a partial update to a vehicle. Administrators only."""
     return VehicleResponse(vehicle=service.update(vehicle_id, payload.changes()))
 
 
