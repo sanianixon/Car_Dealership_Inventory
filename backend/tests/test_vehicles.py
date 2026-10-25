@@ -7,12 +7,18 @@ POST /api/vehicles would make those tests depend on the permissions of an
 endpoint they are not testing.
 """
 
+from datetime import date, timedelta
+
 VALID = {
     "make": "Toyota",
     "model": "Corolla",
     "category": "Sedan",
-    "price": 18500.0,
+    "price": 650000.0,
     "quantity": 4,
+    "year": 2021,
+    "colours": ["Pearl White"],
+    "ownershipNumber": 1,
+    "acquiredOn": (date.today() - timedelta(days=30)).isoformat(),
 }
 
 
@@ -30,7 +36,7 @@ def test_create_returns_the_stored_vehicle(client, auth):
     assert res.status_code == 201
     vehicle = res.json()["vehicle"]
     assert vehicle["make"] == "Toyota"
-    assert vehicle["price"] == 18500.0
+    assert vehicle["price"] == 650000.0
     assert vehicle["quantity"] == 4
     assert vehicle["id"]
     assert vehicle["createdAt"]

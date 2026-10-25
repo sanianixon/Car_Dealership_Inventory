@@ -5,7 +5,7 @@
 A full-stack vehicle inventory system: a token-authenticated REST API over a real
 database, and a React single-page app for browsing, searching and buying stock.
 
-Built test-first for the Incubyte TDD kata. **112 tests — 77 on the backend at
+Built test-first for the Incubyte TDD kata. **126 tests — 91 on the backend at
 99% statement coverage, 35 on the frontend** — and a commit history of 9 RED /
 9 GREEN / 2 refactor steps that shows how the code actually got here.
 
@@ -47,7 +47,7 @@ Built test-first for the Incubyte TDD kata. **112 tests — 77 on the backend at
 | Database | SQLite file (a real database on disk, not in-memory) |
 | Auth | JWT (PyJWT, HS256) with bcrypt password hashing |
 | Frontend | React 19, TypeScript, Vite 7, Tailwind CSS v4 |
-| Backend tests | pytest 9.1 + pytest-cov — 77 tests, 99% coverage |
+| Backend tests | pytest 9.1 + pytest-cov — 91 tests, 99% coverage |
 | Frontend tests | Vitest 3.2 + Testing Library + jsdom — 35 tests |
 
 ## Running it locally
@@ -114,7 +114,7 @@ Backend:
 ```bash
 cd backend
 source venv/bin/activate
-pytest -v                                      # 77 tests
+pytest -v                                      # 91 tests
 pytest --cov=app --cov-report=term-missing     # coverage
 ```
 
@@ -131,8 +131,8 @@ Both run on every push — see
 the backend command is in [`docs/test-report.txt`](docs/test-report.txt).
 
 ```
-77 passed
-TOTAL   449 statements   6 missed   99% coverage
+91 passed
+TOTAL   494 statements   6 missed   99% coverage
 ```
 
 The six uncovered statements are the `get_db` request dependency and the
@@ -149,7 +149,7 @@ deliberately rather than padded with hollow tests.
 | ![Search](docs/screenshots/03-search.png) | ![Sold out](docs/screenshots/04-sold-out.png) |
 | **Search** — filters combine with AND | **Sold out** — Purchase is disabled at zero stock |
 | ![Admin](docs/screenshots/05-admin-edit.png) | ![Coverage](docs/screenshots/06-coverage.png) |
-| **Admin** — add, edit, delete and restock | **Coverage** — backend, 77 tests at 99% |
+| **Admin** — add, edit, delete and restock | **Coverage** — backend, 91 tests at 99% |
 
 ## Architecture
 
@@ -190,11 +190,29 @@ All paths are under `/api`. Every route except register and login needs
 | GET | `/vehicles` | user | | `200 {vehicles}` |
 | GET | `/vehicles/search` | user | query: `make, model, category, minPrice, maxPrice` | `200 {vehicles}` |
 | GET | `/vehicles/{id}` | user | | `200 {vehicle}` |
-| POST | `/vehicles` | **admin** | `{make, model, category, price, quantity}` | `201 {vehicle}` |
+| POST | `/vehicles` | **admin** | the full vehicle (see below) | `201 {vehicle}` |
 | PUT | `/vehicles/{id}` | **admin** | any subset of the above | `200 {vehicle}` |
 | DELETE | `/vehicles/{id}` | **admin** | | `204` |
 | POST | `/vehicles/{id}/purchase` | user | `{quantity?}` (default 1) | `200 {vehicle, purchased}` |
 | POST | `/vehicles/{id}/restock` | **admin** | `{quantity}` | `200 {vehicle, restocked}` |
+
+A vehicle carries its provenance as well as its price, because a used car is
+not chosen on price and stock alone:
+
+```json
+{ "id": "…", "make": "Hyundai", "model": "Creta", "category": "SUV",
+  "price": 1850000.0, "quantity": 4,
+  "year": 2023,
+  "colours": ["Abyss Black", "Ranger Khaki"],
+  "ownershipNumber": 1,
+  "acquiredOn": "2026-10-16",
+  "createdAt": "…", "updatedAt": "…" }
+```
+
+`ownershipNumber` counts owners the way Indian used-car listings do, where 1 is
+the first owner. `acquiredOn` is the day the dealership took the vehicle in, and
+cannot be in the future. `year` accepts next year, because new models reach a
+forecourt before their model year starts.
 
 Errors always use one shape, so the frontend has a single thing to parse:
 
@@ -303,6 +321,7 @@ for `'; DROP TABLE vehicles; --` and checking the table survives.
 | File | Tests | Focus |
 | --- | --- | --- |
 | `test_vehicles.py` | 23 | CRUD, validation, admin-only create/edit/delete |
+| `test_vehicle_details.py` | 14 | Provenance fields: colours, year, ownership, acquisition date |
 | `test_inventory.py` | 14 | Purchase and restock rules |
 | `test_search.py` | 12 | Filters, price bounds, LIKE escaping, injection |
 | `test_auth.py` | 8 | Registration, duplicates, login, JWT claims |
@@ -343,7 +362,11 @@ Stated rather than hidden; each is a deliberate trade for a kata-sized project.
 - **The token lives in `localStorage`**, so any XSS on the origin can read it.
   An httpOnly cookie with CSRF protection would be the production answer.
 - **Prices are floats.** Fine here; production money should be integer minor
-  units.
+  units — paise, in this case.
+- **`colours` is a JSON column, not a child table.** Nothing queries or filters
+  by colour, so a join table would be structure without a purpose. If filtering
+  by colour is ever wanted, normalising is a contained change behind the
+  repository.
 - **No refresh tokens, rate limiting or account lockout.** A token simply
   expires after 8 hours.
 - **SQLite** suits a single-process kata. The purchase guard is plain SQL and
@@ -427,7 +450,7 @@ backend/
     services/          vehicle_service, inventory_service, exceptions, lookup
     repositories/      vehicle_repository (all SQL)
   scripts/seed.py      idempotent admin + starter catalogue
-  tests/               77 tests, including test_concurrency.py
+  tests/               91 tests, including test_concurrency.py
 frontend/
   src/
     api.ts             the only module that calls the API

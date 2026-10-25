@@ -43,14 +43,7 @@ def create_vehicle(
     _: User = Depends(require_admin),
 ) -> VehicleResponse:
     """Add a vehicle to the catalogue. Administrators only."""
-    vehicle = service.create(
-        make=payload.make,
-        model=payload.model,
-        category=payload.category,
-        price=payload.price,
-        quantity=payload.quantity,
-    )
-    return VehicleResponse(vehicle=vehicle)
+    return VehicleResponse(vehicle=service.create(payload.model_dump()))
 
 
 @router.get("", response_model=VehicleListResponse)

@@ -12,6 +12,7 @@ a single car; against the guarded UPDATE exactly one buyer wins.
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 
 from sqlalchemy.orm import sessionmaker
 
@@ -25,7 +26,15 @@ def _vehicle_with_stock(factory: sessionmaker, quantity: int) -> str:
     """Create a vehicle holding `quantity` units and return its id."""
     session = factory()
     vehicle = Vehicle(
-        make="Toyota", model="Corolla", category="Sedan", price=18500.0, quantity=quantity
+        make="Toyota",
+        model="Corolla",
+        category="Sedan",
+        price=650000.0,
+        quantity=quantity,
+        year=2021,
+        colours=["Pearl White"],
+        ownership_number=1,
+        acquired_on=date.today() - timedelta(days=30),
     )
     session.add(vehicle)
     session.commit()

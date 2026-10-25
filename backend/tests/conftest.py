@@ -6,6 +6,7 @@ one another. The app's `get_db` dependency is overridden to point at that file.
 
 import os
 import tempfile
+from datetime import date, timedelta
 from typing import Iterator
 
 import pytest
@@ -87,8 +88,13 @@ def add_vehicle(db):
         "make": "Toyota",
         "model": "Corolla",
         "category": "Sedan",
-        "price": 18500.0,
+        "price": 650000.0,
         "quantity": 4,
+        "year": 2021,
+        "colours": ["Pearl White"],
+        "ownership_number": 1,
+        # Relative, so the suite stays valid however long from now it runs.
+        "acquired_on": date.today() - timedelta(days=30),
     }
 
     def _add(**overrides) -> dict:
@@ -103,6 +109,10 @@ def add_vehicle(db):
             "category": vehicle.category,
             "price": vehicle.price,
             "quantity": vehicle.quantity,
+            "year": vehicle.year,
+            "colours": vehicle.colours,
+            "ownershipNumber": vehicle.ownership_number,
+            "acquiredOn": vehicle.acquired_on.isoformat(),
         }
 
     return _add

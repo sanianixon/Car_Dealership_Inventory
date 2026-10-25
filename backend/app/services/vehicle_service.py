@@ -18,17 +18,14 @@ class VehicleService:
     def __init__(self, repository: VehicleRepository) -> None:
         self._repository = repository
 
-    def create(self, make: str, model: str, category: str, price: float, quantity: int) -> Vehicle:
-        """Add a vehicle to the catalogue."""
-        return self._repository.add(
-            Vehicle(
-                make=make,
-                model=model,
-                category=category,
-                price=price,
-                quantity=quantity,
-            )
-        )
+    def create(self, fields: dict[str, Any]) -> Vehicle:
+        """Add a vehicle to the catalogue.
+
+        Takes the already-validated fields as a mapping rather than nine
+        keyword arguments: the schema has guaranteed their names and values, so
+        restating each one here would only be a second place to update.
+        """
+        return self._repository.add(Vehicle(**fields))
 
     def list_all(self) -> list[Vehicle]:
         """Every vehicle, including sold-out ones."""

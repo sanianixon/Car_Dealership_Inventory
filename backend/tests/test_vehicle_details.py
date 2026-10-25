@@ -147,6 +147,26 @@ def test_today_is_a_valid_acquisition_date(client, auth):
     assert res.status_code == 201
 
 
+def test_colours_sent_as_a_bare_string_is_a_clean_400(client, auth):
+    """The cleaning step must hand a wrong type back, not try to trim it."""
+    res = client.post(
+        "/api/vehicles", json={**DETAILED, "colours": "Red"}, headers=_admin(auth)
+    )
+
+    assert res.status_code == 400
+    assert "colours" in [d["path"] for d in res.json()["error"]["details"]]
+
+
+def test_a_non_string_colour_is_a_clean_400(client, auth):
+    res = client.post(
+        "/api/vehicles",
+        json={**DETAILED, "colours": ["Red", 7]},
+        headers=_admin(auth),
+    )
+
+    assert res.status_code == 400
+
+
 def test_colours_can_be_updated(client, auth):
     headers = _admin(auth)
     created = client.post("/api/vehicles", json=DETAILED, headers=headers).json()["vehicle"]

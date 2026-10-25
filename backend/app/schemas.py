@@ -4,10 +4,18 @@ Responses use camelCase keys (via serialisation aliases) because the React
 frontend consumes them directly.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    EmailStr,
+    Field,
+    model_validator,
+)
 
 
 def _normalise_email(value: Any) -> Any:
@@ -103,14 +111,77 @@ Price = Annotated[float, BeforeValidator(_reject_stringified_number), Field(ge=0
 StockQuantity = Annotated[int, BeforeValidator(_reject_stringified_number), Field(ge=0)]
 
 
+def _clean_colours(value: Any) -> Any:
+    """Trim colour names and drop repeats.
+
+    Listing "Red", "red" and " Red " as three colours is noise rather than
+    information, so they collapse to the first spelling given. A blank name is
+    rejected outright: it means the form was submitted wrongly.
+    """
+    if not isinstance(value, list):
+        return value
+
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for raw in value:
+        if not isinstance(raw, str):
+            return value  # let the list[str] rule report the wrong type
+        name = raw.strip()
+        if not name:
+            raise ValueError("colour names cannot be blank")
+        if name.casefold() not in seen:
+            seen.add(name.casefold())
+            cleaned.append(name)
+    return cleaned
+
+
+def _plausible_year(value: int) -> int:
+    """Reject a build year that cannot belong to a real vehicle.
+
+    Next year is allowed on purpose: new models reach a forecourt before their
+    model year has started.
+    """
+    latest = date.today().year + 1
+    if value < 1900 or value > latest:
+        raise ValueError(f"must be between 1900 and {latest}")
+    return value
+
+
+def _not_in_the_future(value: date) -> date:
+    """A vehicle cannot have arrived tomorrow. Today is fine."""
+    if value > date.today():
+        raise ValueError("cannot be a future date")
+    return value
+
+
+Colours = Annotated[
+    list[Annotated[str, Field(max_length=40)]],
+    BeforeValidator(_clean_colours),
+    Field(min_length=1),
+]
+BuildYear = Annotated[
+    int, BeforeValidator(_reject_stringified_number), AfterValidator(_plausible_year)
+]
+OwnershipNumber = Annotated[
+    int, BeforeValidator(_reject_stringified_number), Field(ge=1)
+]
+AcquisitionDate = Annotated[date, AfterValidator(_not_in_the_future)]
+
+
 class VehicleCreate(BaseModel):
     """Body of POST /api/vehicles."""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     make: ShortText
     model: ShortText
     category: ShortText
     price: Price
     quantity: StockQuantity
+    year: BuildYear
+    colours: Colours
+    ownership_number: OwnershipNumber = Field(alias="ownershipNumber")
+    acquired_on: AcquisitionDate = Field(alias="acquiredOn")
 
 
 class VehicleOut(BaseModel):
@@ -124,6 +195,10 @@ class VehicleOut(BaseModel):
     category: str
     price: float
     quantity: int
+    year: int
+    colours: list[str]
+    ownership_number: int = Field(serialization_alias="ownershipNumber")
+    acquired_on: date = Field(serialization_alias="acquiredOn")
     created_at: datetime = Field(serialization_alias="createdAt")
     updated_at: datetime = Field(serialization_alias="updatedAt")
 
@@ -149,11 +224,17 @@ class VehicleUpdate(BaseModel):
     "id" are ignored, so the path alone decides which row is written.
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     make: ShortText | None = None
     model: ShortText | None = None
     category: ShortText | None = None
     price: Price | None = None
     quantity: StockQuantity | None = None
+    year: BuildYear | None = None
+    colours: Colours | None = None
+    ownership_number: OwnershipNumber | None = Field(default=None, alias="ownershipNumber")
+    acquired_on: AcquisitionDate | None = Field(default=None, alias="acquiredOn")
 
     @model_validator(mode="after")
     def _require_one_field(self) -> "VehicleUpdate":
