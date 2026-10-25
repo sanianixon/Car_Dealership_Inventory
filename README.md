@@ -332,11 +332,7 @@ Stated rather than hidden; each is a deliberate trade for a kata-sized project.
 
 **Tool used:** Claude (Opus 5) via Claude Code, the terminal CLI, in VS Code.
 There were three sessions: planning on claude.ai, a context-review session, and
-the implementation. All three are reproduced verbatim in
-[`PROMPTS.md`](PROMPTS.md), which is generated from the raw session
-transcripts by [`docs/make_prompts.py`](docs/make_prompts.py). That script is
-committed deliberately: it means "unedited" is checkable rather than merely
-claimed, since anyone can re-run it and compare.
+the implementation.
 
 **How I worked.** I built this with Claude Code as a pair. I set the direction
 step by step — what to build next, what the test should assert, what the design
