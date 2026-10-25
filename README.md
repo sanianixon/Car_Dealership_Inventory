@@ -317,7 +317,10 @@ Stated rather than hidden; each is a deliberate trade for a kata-sized project.
 **Tool used:** Claude (Opus 5) via Claude Code, the terminal CLI, in VS Code.
 There were three sessions: planning on claude.ai, a context-review session, and
 the implementation. All three are reproduced verbatim in
-[`PROMPTS.md`](PROMPTS.md).
+[`PROMPTS.md`](PROMPTS.md), which is generated from the raw session
+transcripts by [`docs/make_prompts.py`](docs/make_prompts.py). That script is
+committed deliberately: it means "unedited" is checkable rather than merely
+claimed, since anyone can re-run it and compare.
 
 **How it was used — accurately.** Claude wrote the great majority of the code in
 this repository: the FastAPI application, the test suite, the seed script and the
