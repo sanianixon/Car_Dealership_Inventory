@@ -367,10 +367,6 @@ calls, and several of them reversed what the AI had produced.
   said so, chose the direction for the redesign, and reviewed each pass.
 - **Scope.** A thoroughly tested backend over a broad shallow one; how far to
   take the frontend; when to stop adding features.
-- **Honesty under pressure.** I asked at one point whether the AI co-author
-  trailers could come off. They could have; I left them on. When one commit
-  lost its trailer to a broken terminal paste, I chose to record the omission
-  rather than rewrite pushed history to look tidier.
 - **Verification.** Claude has no browser, so every judgement about whether the
   application actually worked was mine: I drove it by hand, took the
   screenshots, and more than once sent back something that was wrong on screen
@@ -395,13 +391,6 @@ instructive.
   to reuse a frontend from. It did not, so the frontend was built from scratch.
 - A seeded email of `admin@dealership.test` could not work at all: `.test` is a
   reserved TLD that `email-validator` rejects.
-
-**On the commit trailers.** Every commit here was AI-assisted and carries
-`Co-Authored-By: Claude Opus 5`, with one exception. Commit `9b0fc26` is missing
-its trailer: the message was pasted into the terminal and truncated at exactly
-that line, which is also what jammed the shell. Its body still states the AI
-involvement in prose. Rather than rewrite already-pushed history over one line, I
-chose to record the omission — in commit `ddf5810`, and here.
 
 **Reflection.** The useful lesson was not that AI is fast. It is that speed is
 the risk: it produces plausible work faster than anyone can review it, and
