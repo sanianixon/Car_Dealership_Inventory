@@ -392,21 +392,3 @@ instructive.
 - A seeded email of `admin@dealership.test` could not work at all: `.test` is a
   reserved TLD that `email-validator` rejects.
 
-**Reflection.** The useful lesson was not that AI is fast. It is that speed is
-the risk: it produces plausible work faster than anyone can review it, and
-every bad moment in this project was a green signal that meant nothing — a test
-that could not fail, commits that were never made, a type check that checked no
-files, a CI step asserting on a print statement. None of those were caught by
-reading the code more carefully. They were caught by insisting on evidence:
-break the implementation and watch the test catch it, read `git log` instead of
-trusting "done", run the API against a real server rather than only the test
-client.
-
-The other lesson is about where the work actually is. The code was the cheap
-part. Deciding that a listing is not a car, that a permission enforced in the
-interface is not a permission, that an interface which merely works is not
-finished — none of that came out of a prompt, and none of it would have been
-caught by a faster model. That is the part I would bring to a team, and the
-part I would want to be asked about.
-
----
