@@ -6,7 +6,14 @@
  * component.
  */
 
-import type { SearchFilters, User, Vehicle } from "./types";
+import type {
+  SearchFilters,
+  UnitDraft,
+  User,
+  Vehicle,
+  VehicleDetail,
+  VehicleUnit,
+} from "./types";
 
 const TOKEN_KEY = "dealership.token";
 
@@ -110,21 +117,40 @@ export const api = {
   searchVehicles: (filters: SearchFilters) =>
     request<{ vehicles: Vehicle[] }>("GET", `/vehicles/search${searchQuery(filters)}`),
 
-  createVehicle: (vehicle: Omit<Vehicle, "id" | "createdAt" | "updatedAt">) =>
-    request<{ vehicle: Vehicle }>("POST", "/vehicles", vehicle),
+  /** One listing together with the individual cars behind it. */
+  getVehicle: (id: string) =>
+    request<{ vehicle: VehicleDetail }>("GET", `/vehicles/${id}`),
 
-  updateVehicle: (id: string, changes: Partial<Vehicle>) =>
-    request<{ vehicle: Vehicle }>("PUT", `/vehicles/${id}`, changes),
+  createVehicle: (listing: {
+    make: string;
+    model: string;
+    category: string;
+    units: UnitDraft[];
+  }) => request<{ vehicle: Vehicle }>("POST", "/vehicles", listing),
+
+  updateVehicle: (
+    id: string,
+    changes: Partial<Pick<Vehicle, "make" | "model" | "category">>,
+  ) => request<{ vehicle: Vehicle }>("PUT", `/vehicles/${id}`, changes),
 
   deleteVehicle: (id: string) => request<void>("DELETE", `/vehicles/${id}`),
 
-  purchase: (id: string, quantity = 1) =>
-    request<{ vehicle: Vehicle; purchased: number }>("POST", `/vehicles/${id}/purchase`, {
-      quantity,
-    }),
+  /**
+   * Buy a car. Naming a unit buys that car; omitting it buys the cheapest
+   * available of that model, which is what "buy a Honda City" means.
+   */
+  purchase: (id: string, unitId?: string) =>
+    request<{ vehicle: Vehicle; unit: VehicleUnit }>(
+      "POST",
+      `/vehicles/${id}/purchase`,
+      unitId ? { unitId } : {},
+    ),
 
-  restock: (id: string, quantity: number) =>
-    request<{ vehicle: Vehicle; restocked: number }>("POST", `/vehicles/${id}/restock`, {
-      quantity,
-    }),
+  /** Take more cars of a model onto the lot. */
+  restock: (id: string, units: UnitDraft[]) =>
+    request<{ vehicle: Vehicle; restocked: number; units: VehicleUnit[] }>(
+      "POST",
+      `/vehicles/${id}/restock`,
+      { units },
+    ),
 };

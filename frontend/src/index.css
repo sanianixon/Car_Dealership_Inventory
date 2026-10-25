@@ -1,48 +1,66 @@
 @import "tailwindcss";
 
 /*
- * Design tokens. Tailwind v4 reads these from @theme, so they are available as
- * utilities (bg-petrol-600, text-tag-amber) and stay consistent across the app.
+ * Design tokens.
  *
- * The palette is a dealership forecourt: petrol blue-green for the brand,
- * amber for "nearly gone", red for sold out.
+ * The palette is paper, ink and clay: a warm off-white page, near-black text
+ * and controls, and one saturated accent. Deliberately not a blue-or-teal
+ * dashboard — a forecourt deals in printed tickets and painted metal, and a
+ * single warm accent carries the brand without a second colour competing.
+ *
+ * Primary actions are ink rather than the accent, so the accent stays rare
+ * enough to mean something.
  */
 @theme {
   --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  --color-petrol-50: #effcfa;
-  --color-petrol-100: #d6f6f1;
-  --color-petrol-200: #aeeae4;
-  --color-petrol-400: #45b5ad;
-  --color-petrol-600: #0f766e;
-  --color-petrol-700: #115e59;
-  --color-petrol-900: #0b3b38;
+  /* Page and surfaces */
+  --color-paper: #f7f5f2;
+  --color-surface: #ffffff;
 
-  --color-forecourt-50: #f7f8f8;
-  --color-forecourt-100: #eef0f1;
-  --color-forecourt-300: #cbd2d6;
-  --color-forecourt-500: #6b7a82;
-  --color-forecourt-700: #3b474d;
-  --color-forecourt-900: #1b2327;
+  /* Ink: text, borders, primary controls */
+  --color-ink-900: #14181b;
+  --color-ink-700: #394147;
+  --color-ink-500: #6d767d;
+  --color-ink-300: #b9b4ad;
+  --color-ink-200: #dcd8d2;
+  --color-ink-100: #ebe7e1;
 
-  --color-tag-amber: #b45309;
-  --color-tag-red: #b42318;
+  /* Clay: the one accent */
+  --color-clay-700: #93371f;
+  --color-clay-600: #b4452f;
+  --color-clay-100: #f3e2dd;
+  --color-clay-50: #faf0ed;
+
+  /* Stock signals */
+  --color-signal-low: #8a5a06;
+  --color-signal-out: #8c8880;
 }
 
 html {
-  background-color: var(--color-forecourt-50);
+  background-color: var(--color-paper);
 }
 
 body {
   margin: 0;
   font-family: var(--font-sans);
-  color: var(--color-forecourt-900);
+  color: var(--color-ink-900);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Visible keyboard focus everywhere, rather than relying on the browser default
-   that several resets remove. */
+/*
+ * Figures line up in columns and never shift width as stock changes, which
+ * matters on a page that is mostly numbers.
+ */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Visible keyboard focus everywhere, rather than relying on the browser
+   default that several resets remove. */
 :focus-visible {
-  outline: 2px solid var(--color-petrol-600);
+  outline: 2px solid var(--color-clay-600);
   outline-offset: 2px;
 }

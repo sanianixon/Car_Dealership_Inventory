@@ -108,31 +108,6 @@ def _strip(value: Any) -> Any:
 # a name the same way.
 ShortText = Annotated[str, BeforeValidator(_strip), Field(min_length=1, max_length=100)]
 Price = Annotated[float, BeforeValidator(_reject_stringified_number), Field(ge=0)]
-StockQuantity = Annotated[int, BeforeValidator(_reject_stringified_number), Field(ge=0)]
-
-
-def _clean_colours(value: Any) -> Any:
-    """Trim colour names and drop repeats.
-
-    Listing "Red", "red" and " Red " as three colours is noise rather than
-    information, so they collapse to the first spelling given. A blank name is
-    rejected outright: it means the form was submitted wrongly.
-    """
-    if not isinstance(value, list):
-        return value
-
-    seen: set[str] = set()
-    cleaned: list[str] = []
-    for raw in value:
-        if not isinstance(raw, str):
-            return value  # let the list[str] rule report the wrong type
-        name = raw.strip()
-        if not name:
-            raise ValueError("colour names cannot be blank")
-        if name.casefold() not in seen:
-            seen.add(name.casefold())
-            cleaned.append(name)
-    return cleaned
 
 
 def _plausible_year(value: int) -> int:
@@ -154,11 +129,6 @@ def _not_in_the_future(value: date) -> date:
     return value
 
 
-Colours = Annotated[
-    list[Annotated[str, Field(max_length=40)]],
-    BeforeValidator(_clean_colours),
-    Field(min_length=1),
-]
 BuildYear = Annotated[
     int, BeforeValidator(_reject_stringified_number), AfterValidator(_plausible_year)
 ]
@@ -168,24 +138,52 @@ OwnershipNumber = Annotated[
 AcquisitionDate = Annotated[date, AfterValidator(_not_in_the_future)]
 
 
-class VehicleCreate(BaseModel):
-    """Body of POST /api/vehicles."""
+class UnitCreate(BaseModel):
+    """One car being taken onto the lot."""
 
     model_config = ConfigDict(populate_by_name=True)
+
+    year: BuildYear
+    colour: ShortText
+    price: Price
+    ownership_number: OwnershipNumber = Field(default=1, alias="ownershipNumber")
+    acquired_on: AcquisitionDate = Field(alias="acquiredOn")
+
+
+class VehicleCreate(BaseModel):
+    """Body of POST /api/vehicles.
+
+    A listing is created with the cars that make it up: there is no such thing
+    as a model in stock with no actual cars, so at least one unit is required.
+    """
 
     make: ShortText
     model: ShortText
     category: ShortText
-    price: Price
-    quantity: StockQuantity
-    year: BuildYear
-    colours: Colours
-    ownership_number: OwnershipNumber = Field(alias="ownershipNumber")
-    acquired_on: AcquisitionDate = Field(alias="acquiredOn")
+    units: list[UnitCreate] = Field(min_length=1)
+
+
+class UnitOut(BaseModel):
+    """Public view of one car."""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: str
+    year: int
+    colour: str
+    price: float
+    ownership_number: int = Field(serialization_alias="ownershipNumber")
+    acquired_on: date = Field(serialization_alias="acquiredOn")
+    is_available: bool = Field(serialization_alias="isAvailable")
 
 
 class VehicleOut(BaseModel):
-    """Public view of a vehicle."""
+    """Public view of a listing.
+
+    price and quantity are derived from the available units, not stored, so a
+    card can never show stock the lot does not have. price is the cheapest car
+    available, which is the figure a forecourt advertises.
+    """
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -195,22 +193,31 @@ class VehicleOut(BaseModel):
     category: str
     price: float
     quantity: int
-    year: int
     colours: list[str]
-    ownership_number: int = Field(serialization_alias="ownershipNumber")
-    acquired_on: date = Field(serialization_alias="acquiredOn")
     created_at: datetime = Field(serialization_alias="createdAt")
     updated_at: datetime = Field(serialization_alias="updatedAt")
 
 
+class VehicleDetail(VehicleOut):
+    """A listing together with the individual cars behind it."""
+
+    units: list[UnitOut]
+
+
 class VehicleResponse(BaseModel):
-    """Envelope wrapping a single vehicle."""
+    """Envelope wrapping a single listing."""
 
     vehicle: VehicleOut
 
 
+class VehicleDetailResponse(BaseModel):
+    """Envelope wrapping a listing and its cars."""
+
+    vehicle: VehicleDetail
+
+
 class VehicleListResponse(BaseModel):
-    """Envelope wrapping a list of vehicles."""
+    """Envelope wrapping a list of listings."""
 
     vehicles: list[VehicleOut]
 
@@ -218,23 +225,13 @@ class VehicleListResponse(BaseModel):
 class VehicleUpdate(BaseModel):
     """Body of PUT /api/vehicles/{id}.
 
-    Every field is optional so a caller can send a subset, but an entirely
-    empty body is rejected: it almost always means the caller built the request
-    wrongly, and silently succeeding would hide that. Unknown keys such as
-    "id" are ignored, so the path alone decides which row is written.
+    Only the listing's own fields. A car's year, colour, price or history is
+    changed on the unit, not here, because it does not describe the model.
     """
-
-    model_config = ConfigDict(populate_by_name=True)
 
     make: ShortText | None = None
     model: ShortText | None = None
     category: ShortText | None = None
-    price: Price | None = None
-    quantity: StockQuantity | None = None
-    year: BuildYear | None = None
-    colours: Colours | None = None
-    ownership_number: OwnershipNumber | None = Field(default=None, alias="ownershipNumber")
-    acquired_on: AcquisitionDate | None = Field(default=None, alias="acquiredOn")
 
     @model_validator(mode="after")
     def _require_one_field(self) -> "VehicleUpdate":
@@ -293,28 +290,34 @@ class VehicleSearch(BaseModel):
         return self
 
 
-PurchaseQuantity = Annotated[
-    int, BeforeValidator(_reject_stringified_number), Field(ge=1)
-]
-
-
 class PurchaseRequest(BaseModel):
-    """Body of POST /api/vehicles/{id}/purchase. Defaults to a single unit."""
+    """Body of POST /api/vehicles/{id}/purchase.
 
-    quantity: PurchaseQuantity = 1
+    A buyer may name the car they want. Left out, the cheapest available car of
+    that model is taken, which is what "buy a Honda City" means on a forecourt
+    and keeps the endpoint usable without knowing unit ids.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    unit_id: str | None = Field(default=None, alias="unitId")
 
 
 class RestockRequest(BaseModel):
-    """Body of POST /api/vehicles/{id}/restock. The quantity is mandatory."""
+    """Body of POST /api/vehicles/{id}/restock.
 
-    quantity: PurchaseQuantity
+    Restocking a used-car lot means taking specific cars in, each with its own
+    history and price, so this takes units rather than a count.
+    """
+
+    units: list[UnitCreate] = Field(min_length=1)
 
 
 class PurchaseResponse(BaseModel):
-    """Envelope returned by a purchase."""
+    """Envelope returned by a purchase: the car bought and the listing after."""
 
     vehicle: VehicleOut
-    purchased: int
+    unit: UnitOut
 
 
 class RestockResponse(BaseModel):
@@ -322,3 +325,4 @@ class RestockResponse(BaseModel):
 
     vehicle: VehicleOut
     restocked: int
+    units: list[UnitOut]

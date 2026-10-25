@@ -1,188 +1,198 @@
-"""Tests for purchasing and restocking, including concurrent purchases."""
+"""Tests for buying a specific car and for taking more cars in."""
 
-from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 
-VALID = {
-    "make": "Toyota",
-    "model": "Corolla",
-    "category": "Sedan",
-    "price": 18500.0,
-    "quantity": 3,
+ACQUIRED = (date.today() - timedelta(days=30)).isoformat()
+
+UNIT = {
+    "year": 2022,
+    "colour": "Pearl White",
+    "price": 1180000.0,
+    "ownershipNumber": 1,
+    "acquiredOn": ACQUIRED,
 }
 
 
-def add_vehicle(**overrides) -> dict:
-    return client.post(
-        "/api/vehicles", json={**VALID, **overrides}, headers=headers
-    ).json()["vehicle"]
+def _admin(auth):
+    return auth(email="boss@dealership.com", admin=True)
 
 
-def test_purchase_requires_authentication(client, auth, add_vehicle):
+def test_purchase_requires_authentication(client, add_vehicle):
     vehicle = add_vehicle()
 
     assert client.post(f"/api/vehicles/{vehicle['id']}/purchase").status_code == 401
 
 
-def test_purchase_defaults_to_one_unit(client, auth, add_vehicle):
-    headers = auth()
-    vehicle = add_vehicle(quantity=3)
+def test_purchase_without_naming_a_car_takes_the_cheapest(client, auth, add_vehicle):
+    """What "buy a Honda City" means on a forecourt."""
+    vehicle = add_vehicle(units=[{"price": 1340000.0}, {"price": 980000.0}])
 
-    res = client.post(f"/api/vehicles/{vehicle['id']}/purchase", json={}, headers=headers)
+    res = client.post(f"/api/vehicles/{vehicle['id']}/purchase", json={}, headers=auth())
 
     assert res.status_code == 200
     body = res.json()
-    assert body["purchased"] == 1
-    assert body["vehicle"]["quantity"] == 2
+    assert body["unit"]["price"] == 980000.0
+    assert body["unit"]["isAvailable"] is False
+    assert body["vehicle"]["quantity"] == 1
 
 
-def test_purchase_with_an_explicit_quantity(client, auth, add_vehicle):
-    headers = auth()
-    vehicle = add_vehicle(quantity=3)
+def test_a_buyer_can_name_the_car_they_want(client, auth, add_vehicle):
+    vehicle = add_vehicle(
+        units=[{"price": 980000.0, "colour": "Fire Red"}, {"price": 1340000.0, "colour": "Jet Black"}]
+    )
+    dearer = vehicle["units"][1]["id"]
 
     res = client.post(
-        f"/api/vehicles/{vehicle['id']}/purchase", json={"quantity": 3}, headers=headers
+        f"/api/vehicles/{vehicle['id']}/purchase", json={"unitId": dearer}, headers=auth()
     )
 
     assert res.status_code == 200
-    assert res.json()["vehicle"]["quantity"] == 0
+    assert res.json()["unit"]["colour"] == "Jet Black"
+    # The cheap one is still there, so the listing still advertises its price.
+    assert res.json()["vehicle"]["price"] == 980000.0
 
 
-def test_purchasing_a_sold_out_vehicle_is_rejected(client, auth, add_vehicle):
+def test_the_same_car_cannot_be_bought_twice(client, auth, add_vehicle):
+    vehicle = add_vehicle(units=2)
+    first = vehicle["unitIds"][0]
     headers = auth()
-    vehicle = add_vehicle(quantity=0)
 
-    res = client.post(f"/api/vehicles/{vehicle['id']}/purchase", json={}, headers=headers)
+    assert (
+        client.post(
+            f"/api/vehicles/{vehicle['id']}/purchase",
+            json={"unitId": first},
+            headers=headers,
+        ).status_code
+        == 200
+    )
+
+    again = client.post(
+        f"/api/vehicles/{vehicle['id']}/purchase", json={"unitId": first}, headers=headers
+    )
+
+    assert again.status_code == 409
+    assert again.json()["error"]["message"]
+
+
+def test_buying_from_a_sold_out_listing_is_rejected(client, auth, add_vehicle):
+    vehicle = add_vehicle(units=0)
+
+    res = client.post(f"/api/vehicles/{vehicle['id']}/purchase", json={}, headers=auth())
 
     assert res.status_code == 409
     assert res.json()["error"]["message"] == "Vehicle is out of stock"
 
 
-def test_purchasing_more_than_available_is_rejected(client, auth, add_vehicle):
-    headers = auth()
-    vehicle = add_vehicle(quantity=2)
+def test_a_car_belonging_to_another_listing_cannot_be_bought_here(
+    client, auth, add_vehicle
+):
+    """The unit must belong to the listing in the path.
+
+    Otherwise any car in the dealership could be bought through any listing's
+    URL, which is a confusing audit trail at best.
+    """
+    city = add_vehicle(make="Honda", model="City")
+    amaze = add_vehicle(make="Honda", model="Amaze")
 
     res = client.post(
-        f"/api/vehicles/{vehicle['id']}/purchase", json={"quantity": 5}, headers=headers
+        f"/api/vehicles/{city['id']}/purchase",
+        json={"unitId": amaze["unitIds"][0]},
+        headers=auth(),
     )
 
-    assert res.status_code == 409
-    # The failed purchase must not have changed the stock.
-    assert (
-        client.get(f"/api/vehicles/{vehicle['id']}", headers=headers).json()["vehicle"][
-            "quantity"
-        ]
-        == 2
-    )
+    assert res.status_code == 404
 
 
-def test_purchase_rejects_a_non_positive_quantity(client, auth, add_vehicle):
-    headers = auth()
-    vehicle = add_vehicle()
-
-    for quantity in (0, -1):
-        res = client.post(
-            f"/api/vehicles/{vehicle['id']}/purchase",
-            json={"quantity": quantity},
-            headers=headers,
-        )
-        assert res.status_code == 400
-
-
-def test_purchase_unknown_vehicle_is_404(client, auth):
+def test_purchase_of_an_unknown_listing_is_404(client, auth):
     res = client.post("/api/vehicles/nope/purchase", json={}, headers=auth())
 
     assert res.status_code == 404
 
 
-def test_only_one_caller_can_buy_the_last_unit(client, auth, add_vehicle):
-    """Ten attempts at a single unit leave exactly one winner.
-
-    This is an end-to-end check, not a concurrency one: TestClient drives the
-    app through a single blocking portal, so these requests are serialised and
-    a read-then-write implementation would pass this too. Real contention is
-    exercised in test_concurrency.py.
-    """
+def test_buying_every_car_empties_the_listing(client, auth, add_vehicle):
+    vehicle = add_vehicle(units=3)
     headers = auth()
-    vehicle = add_vehicle(quantity=1)
-    attempts = 10
 
-    def buy(_: int):
-        return client.post(
-            f"/api/vehicles/{vehicle['id']}/purchase", json={"quantity": 1}, headers=headers
-        ).status_code
+    for unit_id in vehicle["unitIds"]:
+        res = client.post(
+            f"/api/vehicles/{vehicle['id']}/purchase",
+            json={"unitId": unit_id},
+            headers=headers,
+        )
+        assert res.status_code == 200
 
-    with ThreadPoolExecutor(max_workers=attempts) as pool:
-        statuses = list(pool.map(buy, range(attempts)))
-
-    assert statuses.count(200) == 1
-    assert statuses.count(409) == attempts - 1
-    # No request may have failed for any other reason, a 500 included.
-    assert set(statuses) == {200, 409}
-
-    remaining = client.get(f"/api/vehicles/{vehicle['id']}", headers=headers).json()
-    assert remaining["vehicle"]["quantity"] == 0
+    listed = client.get(f"/api/vehicles/{vehicle['id']}", headers=headers).json()["vehicle"]
+    assert listed["quantity"] == 0
+    assert listed["colours"] == []
+    assert all(unit["isAvailable"] is False for unit in listed["units"])
 
 
-def test_restock_requires_authentication(client, auth, add_vehicle):
+def test_restock_requires_authentication(client, add_vehicle):
     vehicle = add_vehicle()
 
-    assert (
-        client.post(f"/api/vehicles/{vehicle['id']}/restock", json={"quantity": 1}).status_code
-        == 401
-    )
+    res = client.post(f"/api/vehicles/{vehicle['id']}/restock", json={"units": [UNIT]})
+
+    assert res.status_code == 401
 
 
 def test_restock_is_forbidden_for_a_non_admin(client, auth, add_vehicle):
-    headers = auth()
     vehicle = add_vehicle()
 
     res = client.post(
-        f"/api/vehicles/{vehicle['id']}/restock", json={"quantity": 5}, headers=headers
+        f"/api/vehicles/{vehicle['id']}/restock", json={"units": [UNIT]}, headers=auth()
     )
 
     assert res.status_code == 403
 
 
-def test_restock_as_admin_increases_quantity(client, auth, add_vehicle):
-    member = auth()
-    admin = auth(email="boss@dealership.com", admin=True)
-    vehicle = add_vehicle(quantity=0)
+def test_restock_takes_specific_cars_in(client, auth, add_vehicle):
+    """Restocking a used-car lot means taking named cars in, not raising a count."""
+    vehicle = add_vehicle(units=0)
 
     res = client.post(
-        f"/api/vehicles/{vehicle['id']}/restock", json={"quantity": 7}, headers=admin
+        f"/api/vehicles/{vehicle['id']}/restock",
+        json={
+            "units": [
+                {**UNIT, "colour": "Golden Brown", "price": 1010000.0, "year": 2021},
+                {**UNIT, "colour": "Jet Black", "price": 1290000.0},
+            ]
+        },
+        headers=_admin(auth),
     )
 
     assert res.status_code == 200
     body = res.json()
-    assert body["restocked"] == 7
-    assert body["vehicle"]["quantity"] == 7
+    assert body["restocked"] == 2
+    assert body["vehicle"]["quantity"] == 2
+    assert body["vehicle"]["price"] == 1010000.0
+    assert {unit["colour"] for unit in body["units"]} == {"Golden Brown", "Jet Black"}
 
 
-def test_restock_requires_a_quantity(client, auth, add_vehicle):
-    admin = auth(email="boss@dealership.com", admin=True)
+def test_restock_requires_at_least_one_car(client, auth, add_vehicle):
     vehicle = add_vehicle()
 
-    res = client.post(f"/api/vehicles/{vehicle['id']}/restock", json={}, headers=admin)
+    res = client.post(
+        f"/api/vehicles/{vehicle['id']}/restock", json={"units": []}, headers=_admin(auth)
+    )
 
     assert res.status_code == 400
 
 
-def test_restock_rejects_a_non_positive_quantity(client, auth, add_vehicle):
-    admin = auth(email="boss@dealership.com", admin=True)
+def test_restock_validates_each_car(client, auth, add_vehicle):
     vehicle = add_vehicle()
 
-    for quantity in (0, -3):
-        res = client.post(
-            f"/api/vehicles/{vehicle['id']}/restock",
-            json={"quantity": quantity},
-            headers=admin,
-        )
-        assert res.status_code == 400
+    res = client.post(
+        f"/api/vehicles/{vehicle['id']}/restock",
+        json={"units": [{**UNIT, "price": -5}]},
+        headers=_admin(auth),
+    )
+
+    assert res.status_code == 400
 
 
-def test_restock_unknown_vehicle_is_404(client, auth):
-    admin = auth(email="boss@dealership.com", admin=True)
-
-    res = client.post("/api/vehicles/nope/restock", json={"quantity": 1}, headers=admin)
+def test_restock_of_an_unknown_listing_is_404(client, auth):
+    res = client.post(
+        "/api/vehicles/nope/restock", json={"units": [UNIT]}, headers=_admin(auth)
+    )
 
     assert res.status_code == 404

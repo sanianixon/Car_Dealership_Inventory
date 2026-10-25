@@ -1,5 +1,9 @@
 /**
- * Sign in and registration, as one card with two modes.
+ * Sign in and registration.
+ *
+ * A split layout rather than a centred card: the left panel carries the name
+ * and sets the tone, the right does the work. On a phone the panel collapses
+ * to a header so the form stays above the fold.
  *
  * Field-level messages come from the API's error details, so the rules shown
  * to the user are the ones the server actually enforces rather than a second
@@ -12,6 +16,12 @@ import { ApiError } from "../api";
 import { useAuth } from "../auth-context";
 
 type Mode = "signIn" | "signUp";
+
+const FIELD =
+  "w-full border-0 border-b border-ink-200 bg-transparent px-0 py-2.5 text-ink-900 " +
+  "placeholder:text-ink-300 focus:border-clay-600 focus:outline-none focus:ring-0";
+
+const LABEL = "mb-1 block text-xs font-semibold uppercase tracking-widest text-ink-500";
 
 export function AuthScreen() {
   const { signIn, signUp } = useAuth();
@@ -44,30 +54,44 @@ export function AuthScreen() {
     setError(null);
   }
 
-  const inputClass =
-    "w-full rounded-lg border border-forecourt-300 bg-white px-3 py-2.5 text-forecourt-900 " +
-    "placeholder:text-forecourt-500 focus:border-petrol-600 focus:outline-none";
-
   return (
-    <main className="flex min-h-screen items-center justify-center bg-forecourt-50 px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-petrol-600 text-xl font-bold text-white">
-            CD
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-forecourt-900">
-            Car Dealership Inventory
+    <div className="min-h-screen bg-paper lg:grid lg:grid-cols-[1.1fr_1fr]">
+      {/* Left: the name, set large. Decorative on a phone, where it shrinks. */}
+      <aside className="flex flex-col justify-between bg-ink-900 px-6 py-10 text-paper sm:px-10 lg:px-14 lg:py-14">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-ink-300">
+          Established inventory
+        </p>
+
+        <div className="my-10 lg:my-0">
+          <h1 className="text-4xl font-extrabold leading-[0.95] tracking-tight sm:text-5xl lg:text-7xl">
+            Car
+            <br />
+            Dealership
+            <br />
+            <span className="text-clay-600">Inventory</span>
           </h1>
-          <p className="mt-1 text-sm text-forecourt-500">
-            Sign in to browse and buy from the forecourt.
+          <p className="mt-6 max-w-sm text-sm leading-relaxed text-ink-300">
+            Every vehicle on the forecourt, with live stock. Buyers browse and
+            purchase; staff manage what is on the lot.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-forecourt-100 bg-white p-6 shadow-sm">
-          <div
-            className="mb-6 grid grid-cols-2 gap-1 rounded-lg bg-forecourt-100 p-1"
-            role="tablist"
-          >
+        <dl className="hidden gap-8 text-sm lg:flex">
+          <div>
+            <dt className="text-ink-500">Stock</dt>
+            <dd className="font-semibold">Live, per vehicle</dd>
+          </div>
+          <div>
+            <dt className="text-ink-500">Access</dt>
+            <dd className="font-semibold">Token authenticated</dd>
+          </div>
+        </dl>
+      </aside>
+
+      {/* Right: the form. */}
+      <main className="flex items-center justify-center px-6 py-12 sm:px-10">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex gap-6 border-b border-ink-200" role="tablist">
             {(["signIn", "signUp"] as Mode[]).map((option) => (
               <button
                 key={option}
@@ -76,10 +100,10 @@ export function AuthScreen() {
                 aria-selected={mode === option}
                 onClick={() => switchTo(option)}
                 className={
-                  "rounded-md px-3 py-2 text-sm font-semibold transition " +
+                  "-mb-px border-b-2 pb-3 text-sm font-semibold transition " +
                   (mode === option
-                    ? "bg-white text-petrol-700 shadow-sm"
-                    : "text-forecourt-500 hover:text-forecourt-700")
+                    ? "border-clay-600 text-ink-900"
+                    : "border-transparent text-ink-500 hover:text-ink-700")
                 }
               >
                 {option === "signIn" ? "Sign in" : "Create account"}
@@ -87,9 +111,9 @@ export function AuthScreen() {
             ))}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
             <div>
-              <label htmlFor="email" className="mb-1.5 block text-sm font-medium">
+              <label htmlFor="email" className={LABEL}>
                 Email
               </label>
               <input
@@ -99,16 +123,16 @@ export function AuthScreen() {
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className={inputClass}
+                className={FIELD}
                 placeholder="you@dealership.com"
               />
               {fieldError("email") && (
-                <p className="mt-1.5 text-sm text-tag-red">{fieldError("email")}</p>
+                <p className="mt-2 text-sm text-clay-700">{fieldError("email")}</p>
               )}
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
+              <label htmlFor="password" className={LABEL}>
                 Password
               </label>
               <input
@@ -118,36 +142,38 @@ export function AuthScreen() {
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className={inputClass}
+                className={FIELD}
                 placeholder={mode === "signUp" ? "At least 8 characters" : "••••••••"}
               />
               {fieldError("password") && (
-                <p className="mt-1.5 text-sm text-tag-red">{fieldError("password")}</p>
+                <p className="mt-2 text-sm text-clay-700">{fieldError("password")}</p>
               )}
             </div>
 
             {mode === "signUp" && (
               <div>
-                <label htmlFor="adminCode" className="mb-1.5 block text-sm font-medium">
-                  Admin code{" "}
-                  <span className="font-normal text-forecourt-500">(optional)</span>
+                <label htmlFor="adminCode" className={LABEL}>
+                  Admin code <span className="font-normal normal-case">(optional)</span>
                 </label>
                 <input
                   id="adminCode"
                   type="text"
                   value={adminCode}
                   onChange={(event) => setAdminCode(event.target.value)}
-                  className={inputClass}
+                  className={FIELD}
                   placeholder="Leave blank for a buyer account"
                 />
-                <p className="mt-1.5 text-xs text-forecourt-500">
+                <p className="mt-2 text-xs text-ink-500">
                   Staff only. An invite code grants permission to manage stock.
                 </p>
               </div>
             )}
 
             {error && !fieldError("email") && !fieldError("password") && (
-              <p role="alert" className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-tag-red">
+              <p
+                role="alert"
+                className="border-l-2 border-clay-600 bg-clay-50 px-3 py-2.5 text-sm text-clay-700"
+              >
                 {error.message}
               </p>
             )}
@@ -155,13 +181,13 @@ export function AuthScreen() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-lg bg-petrol-600 px-4 py-2.5 font-semibold text-white transition hover:bg-petrol-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full bg-ink-900 px-4 py-3.5 text-sm font-semibold uppercase tracking-widest text-paper transition hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? "Please wait…" : mode === "signIn" ? "Sign in" : "Create account"}
             </button>
           </form>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

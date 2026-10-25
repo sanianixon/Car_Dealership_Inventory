@@ -36,14 +36,14 @@ export function SearchBar({ filters, onChange, onSearch, onReset, busy }: Props)
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-8 rounded-2xl border border-forecourt-100 bg-white p-4 shadow-sm sm:p-5"
+      className="mb-8 border border-ink-100 bg-surface p-4 shadow-sm sm:p-5"
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {FIELDS.map((field) => (
           <div key={field.key}>
             <label
               htmlFor={field.key}
-              className="mb-1 block text-xs font-semibold uppercase tracking-wide text-forecourt-500"
+              className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-500"
             >
               {field.label}
             </label>
@@ -54,7 +54,7 @@ export function SearchBar({ filters, onChange, onSearch, onReset, busy }: Props)
               value={filters[field.key]}
               placeholder={field.placeholder}
               onChange={(event) => onChange({ ...filters, [field.key]: event.target.value })}
-              className="w-full rounded-lg border border-forecourt-300 px-3 py-2 text-sm focus:border-petrol-600 focus:outline-none"
+              className="w-full border border-ink-200 px-3 py-2 text-sm focus:border-clay-600 focus:outline-none"
             />
           </div>
         ))}
@@ -64,7 +64,7 @@ export function SearchBar({ filters, onChange, onSearch, onReset, busy }: Props)
         <button
           type="submit"
           disabled={busy}
-          className="rounded-lg bg-petrol-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-petrol-700 disabled:opacity-60"
+          className="bg-ink-900 px-5 py-2 text-sm font-semibold text-paper transition hover:bg-ink-700 disabled:opacity-60"
         >
           {busy ? "Searching…" : "Search"}
         </button>
@@ -72,7 +72,7 @@ export function SearchBar({ filters, onChange, onSearch, onReset, busy }: Props)
           <button
             type="button"
             onClick={onReset}
-            className="rounded-lg px-4 py-2 text-sm font-semibold text-forecourt-700 transition hover:bg-forecourt-100"
+            className="px-4 py-2 text-sm font-semibold text-ink-700 transition hover:bg-ink-100"
           >
             Clear filters
           </button>

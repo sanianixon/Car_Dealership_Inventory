@@ -1,4 +1,4 @@
-"""Populate the database with an administrator and a starter inventory.
+"""Populate the database with an administrator and a starter catalogue.
 
 Run from the backend directory:
 
@@ -7,8 +7,8 @@ Run from the backend directory:
 Safe to run repeatedly: existing rows are left alone, so re-running after a
 code change tops up what is missing instead of duplicating the fleet.
 
-This script drives the same VehicleService the API uses. That is the payoff
-for keeping the service layer free of request and response types: the business
+This script drives the same VehicleService the API uses. That is the payoff for
+keeping the service layer free of request and response types: the business
 rules are reachable from a plain Python process, with no HTTP involved.
 """
 
@@ -28,60 +28,124 @@ from app.repositories.vehicle_repository import VehicleRepository  # noqa: E402
 from app.security import hash_password  # noqa: E402
 from app.services.vehicle_service import VehicleService  # noqa: E402
 
+ADMIN_EMAIL = "admin@dealership.com"
+ADMIN_PASSWORD = "Admin#12345"
+
+
 def _days_ago(days: int) -> date:
     """A date relative to today, so seeded records never look stale."""
     return date.today() - timedelta(days=days)
 
 
-ADMIN_EMAIL = "admin@dealership.com"
-ADMIN_PASSWORD = "Admin#12345"
+def _car(year: int, colour: str, price: float, owners: int, days: int) -> dict:
+    """One car on the lot."""
+    return {
+        "year": year,
+        "colour": colour,
+        "price": price,
+        "ownership_number": owners,
+        "acquired_on": _days_ago(days),
+    }
+
 
 # Prices are rupees, at roughly what each model fetches used on an Indian
-# forecourt. Two entries are deliberately out of stock so the dashboard always
-# has a disabled Purchase button to show.
+# forecourt. Each listing holds real cars that differ in year, colour, owner
+# and price — which is the point: four Citys are four different cars.
+#
+# "sold" marks cars the dealership has already sold. They stay on the record
+# and keep their listing visible with a disabled Purchase button, which is what
+# a sold-out model should look like.
 FLEET = [
-    {"make": "Maruti", "model": "Swift", "category": "Hatchback", "price": 650000.0,
-     "quantity": 11, "year": 2021, "colours": ["Pearl White", "Fire Red", "Granite Grey"],
-     "ownership_number": 1, "acquired_on": _days_ago(42)},
-    {"make": "Maruti", "model": "Baleno", "category": "Hatchback", "price": 780000.0,
-     "quantity": 6, "year": 2022, "colours": ["Nexa Blue", "Opulent Red"],
-     "ownership_number": 1, "acquired_on": _days_ago(18)},
-    {"make": "Hyundai", "model": "i20", "category": "Hatchback", "price": 820000.0,
-     "quantity": 9, "year": 2022, "colours": ["Polar White", "Titan Grey"],
-     "ownership_number": 2, "acquired_on": _days_ago(63)},
-    {"make": "Hyundai", "model": "Creta", "category": "SUV", "price": 1850000.0,
-     "quantity": 4, "year": 2023, "colours": ["Abyss Black", "Ranger Khaki"],
-     "ownership_number": 1, "acquired_on": _days_ago(9)},
-    {"make": "Tata", "model": "Nexon EV", "category": "Electric", "price": 1420000.0,
-     "quantity": 3, "year": 2023, "colours": ["Pristine White", "Daytona Grey"],
-     "ownership_number": 1, "acquired_on": _days_ago(27)},
-    {"make": "Tata", "model": "Punch", "category": "SUV", "price": 740000.0,
-     "quantity": 7, "year": 2022, "colours": ["Atomic Orange", "Tropical Mist"],
-     "ownership_number": 2, "acquired_on": _days_ago(88)},
-    {"make": "Mahindra", "model": "Thar", "category": "SUV", "price": 1560000.0,
-     "quantity": 0, "year": 2022, "colours": ["Red Rage", "Napoli Black"],
-     "ownership_number": 1, "acquired_on": _days_ago(120)},
-    {"make": "Mahindra", "model": "XUV700", "category": "SUV", "price": 2190000.0,
-     "quantity": 2, "year": 2023, "colours": ["Electric Blue", "Midnight Black"],
-     "ownership_number": 1, "acquired_on": _days_ago(15)},
-    {"make": "Toyota", "model": "Innova Crysta", "category": "MPV", "price": 2250000.0,
-     "quantity": 3, "year": 2021, "colours": ["Super White", "Attitude Black"],
-     "ownership_number": 2, "acquired_on": _days_ago(75)},
-    {"make": "Toyota", "model": "Fortuner", "category": "SUV", "price": 3850000.0,
-     "quantity": 1, "year": 2022, "colours": ["Phantom Brown", "Super White"],
-     "ownership_number": 1, "acquired_on": _days_ago(33)},
-    {"make": "Honda", "model": "City", "category": "Sedan", "price": 1180000.0,
-     "quantity": 5, "year": 2022, "colours": ["Platinum White", "Radiant Red"],
-     "ownership_number": 1, "acquired_on": _days_ago(21)},
-    {"make": "Honda", "model": "Amaze", "category": "Sedan", "price": 690000.0,
-     "quantity": 4, "year": 2021, "colours": ["Golden Brown", "Meteoroid Grey"],
-     "ownership_number": 3, "acquired_on": _days_ago(140)},
-    {"make": "Kia", "model": "Seltos", "category": "SUV", "price": 1690000.0,
-     "quantity": 4, "year": 2023, "colours": ["Gravity Grey", "Intense Red"],
-     "ownership_number": 1, "acquired_on": _days_ago(11)},
-    {"make": "Skoda", "model": "Slavia", "category": "Sedan", "price": 1320000.0,
-     "quantity": 0, "year": 2023, "colours": ["Crystal Blue", "Candy White"],
-     "ownership_number": 1, "acquired_on": _days_ago(54)},
+    {
+        "make": "Maruti", "model": "Swift", "category": "Hatchback",
+        "units": [
+            _car(2021, "Pearl White", 620000.0, 2, 42),
+            _car(2022, "Fire Red", 690000.0, 1, 23),
+            _car(2022, "Granite Grey", 705000.0, 1, 12),
+            _car(2019, "Lucent Orange", 480000.0, 3, 96),
+        ],
+    },
+    {
+        "make": "Maruti", "model": "Baleno", "category": "Hatchback",
+        "units": [
+            _car(2022, "Nexa Blue", 780000.0, 1, 18),
+            _car(2021, "Opulent Red", 710000.0, 2, 57),
+        ],
+    },
+    {
+        "make": "Hyundai", "model": "i20", "category": "Hatchback",
+        "units": [
+            _car(2022, "Polar White", 820000.0, 1, 63),
+            _car(2020, "Titan Grey", 640000.0, 2, 110),
+        ],
+    },
+    {
+        "make": "Hyundai", "model": "Creta", "category": "SUV",
+        "units": [
+            _car(2023, "Abyss Black", 1890000.0, 1, 9),
+            _car(2021, "Ranger Khaki", 1520000.0, 2, 71),
+            _car(2022, "Polar White", 1680000.0, 1, 34),
+        ],
+    },
+    {
+        "make": "Tata", "model": "Nexon EV", "category": "Electric",
+        "units": [
+            _car(2023, "Pristine White", 1420000.0, 1, 27),
+            _car(2022, "Daytona Grey", 1265000.0, 1, 49),
+        ],
+    },
+    {
+        "make": "Tata", "model": "Punch", "category": "SUV",
+        "units": [_car(2022, "Atomic Orange", 740000.0, 2, 88)],
+    },
+    {
+        "make": "Mahindra", "model": "Thar", "category": "SUV",
+        "units": [
+            {**_car(2022, "Red Rage", 1560000.0, 1, 120), "sold": True},
+            {**_car(2021, "Napoli Black", 1385000.0, 2, 150), "sold": True},
+        ],
+    },
+    {
+        "make": "Mahindra", "model": "XUV700", "category": "SUV",
+        "units": [
+            _car(2023, "Electric Blue", 2190000.0, 1, 15),
+            _car(2023, "Midnight Black", 2240000.0, 1, 6),
+        ],
+    },
+    {
+        "make": "Toyota", "model": "Innova Crysta", "category": "MPV",
+        "units": [
+            _car(2021, "Super White", 2080000.0, 2, 75),
+            _car(2022, "Attitude Black", 2320000.0, 1, 30),
+        ],
+    },
+    {
+        "make": "Toyota", "model": "Fortuner", "category": "SUV",
+        "units": [_car(2022, "Phantom Brown", 3850000.0, 1, 33)],
+    },
+    {
+        "make": "Honda", "model": "City", "category": "Sedan",
+        "units": [
+            _car(2022, "Platinum White", 1180000.0, 1, 21),
+            _car(2020, "Radiant Red", 915000.0, 3, 134),
+            _car(2023, "Meteoroid Grey", 1345000.0, 1, 8),
+        ],
+    },
+    {
+        "make": "Honda", "model": "Amaze", "category": "Sedan",
+        "units": [_car(2021, "Golden Brown", 690000.0, 3, 140)],
+    },
+    {
+        "make": "Kia", "model": "Seltos", "category": "SUV",
+        "units": [
+            _car(2023, "Gravity Grey", 1690000.0, 1, 11),
+            _car(2022, "Intense Red", 1545000.0, 1, 45),
+        ],
+    },
+    {
+        "make": "Skoda", "model": "Slavia", "category": "Sedan",
+        "units": [{**_car(2023, "Crystal Blue", 1320000.0, 1, 54), "sold": True}],
+    },
 ]
 
 
@@ -106,27 +170,37 @@ def seed_admin(session) -> bool:
     return True
 
 
-def seed_fleet(session) -> int:
-    """Add any missing vehicles, identified by make and model.
+def seed_fleet(session) -> tuple[int, int]:
+    """Add any missing listings with their cars.
 
-    Returns the number inserted.
+    Returns (listings added, cars added).
     """
-    service = VehicleService(VehicleRepository(session))
-    added = 0
+    repository = VehicleRepository(session)
+    service = VehicleService(repository)
+    listings = cars = 0
 
     for entry in FLEET:
-        already_there = session.scalar(
-            select(Vehicle).where(
-                Vehicle.make == entry["make"], Vehicle.model == entry["model"]
-            )
-        )
-        if already_there is not None:
+        if repository.find_by_model(entry["make"], entry["model"]) is not None:
             continue
 
-        service.create(entry)
-        added += 1
+        units = [{key: value for key, value in unit.items() if key != "sold"}
+                 for unit in entry["units"]]
+        vehicle = service.create(
+            make=entry["make"],
+            model=entry["model"],
+            category=entry["category"],
+            units=units,
+        )
+        listings += 1
+        cars += len(units)
 
-    return added
+        # Cars marked sold are claimed through the same guarded update the API
+        # uses, so the seeded history is produced the same way a real sale is.
+        for unit, spec in zip(vehicle.units, entry["units"]):
+            if spec.get("sold"):
+                repository.claim_unit(unit.id)
+
+    return listings, cars
 
 
 def main() -> None:
@@ -134,12 +208,15 @@ def main() -> None:
 
     with SessionLocal() as session:
         admin_created = seed_admin(session)
-        vehicles_added = seed_fleet(session)
-        fleet_size = len(list(session.scalars(select(Vehicle))))
+        listings_added, cars_added = seed_fleet(session)
+        catalogue = list(session.scalars(select(Vehicle)))
+        in_stock = sum(vehicle.quantity for vehicle in catalogue)
+        sold_out = [v.model for v in catalogue if v.quantity == 0]
 
     print(f"admin {ADMIN_EMAIL}: {'created' if admin_created else 'already present'}")
-    print(f"vehicles added: {vehicles_added}")
-    print(f"vehicles in catalogue: {fleet_size}")
+    print(f"listings added: {listings_added}, cars added: {cars_added}")
+    print(f"catalogue: {len(catalogue)} models, {in_stock} cars available")
+    print(f"sold out: {', '.join(sold_out) if sold_out else 'none'}")
     if admin_created:
         print(f"admin password: {ADMIN_PASSWORD}")
 

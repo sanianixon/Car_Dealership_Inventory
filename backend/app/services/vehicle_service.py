@@ -7,47 +7,66 @@ database session.
 
 from typing import Any
 
-from app.models import Vehicle
+from app.models import Vehicle, VehicleUnit
 from app.repositories.vehicle_repository import VehicleRepository
+from app.services.exceptions import DuplicateListingError
 from app.services.lookup import require_vehicle
 
 
 class VehicleService:
-    """Catalogue operations."""
+    """Catalogue operations on listings."""
 
     def __init__(self, repository: VehicleRepository) -> None:
         self._repository = repository
 
-    def create(self, fields: dict[str, Any]) -> Vehicle:
-        """Add a vehicle to the catalogue.
+    def create(self, make: str, model: str, category: str, units: list[dict[str, Any]]) -> Vehicle:
+        """Add a listing together with the cars that make it up.
 
-        Takes the already-validated fields as a mapping rather than nine
-        keyword arguments: the schema has guaranteed their names and values, so
-        restating each one here would only be a second place to update.
+        A model is not stocked without actual cars, so the schema requires at
+        least one unit and this method stores them in the same transaction as
+        the listing: a listing with no cars would show as sold out the moment
+        it was created.
         """
-        return self._repository.add(Vehicle(**fields))
+        if self._repository.find_by_model(make, model) is not None:
+            raise DuplicateListingError(f"{make} {model} is already listed")
+
+        vehicle = Vehicle(
+            make=make,
+            model=model,
+            category=category,
+            units=[VehicleUnit(**unit) for unit in units],
+        )
+        return self._repository.add(vehicle)
 
     def list_all(self) -> list[Vehicle]:
-        """Every vehicle, including sold-out ones."""
+        """Every listing, including those with nothing left in stock."""
         return self._repository.list_all()
 
     def get(self, vehicle_id: str) -> Vehicle:
-        """Return one vehicle, or raise if the id is unknown."""
+        """Return one listing with its cars, or raise if the id is unknown."""
         return require_vehicle(self._repository, vehicle_id)
 
     def update(self, vehicle_id: str, changes: dict[str, Any]) -> Vehicle:
-        """Apply a partial update to one vehicle.
+        """Apply a partial update to a listing's own fields.
 
-        Only the keys present in `changes` are written; the schema has already
-        guaranteed they are editable fields with valid values.
+        A car's year, colour, price or history is not changed here: those
+        belong to the unit, not to the model.
         """
         vehicle = self.get(vehicle_id)
+
+        make = changes.get("make", vehicle.make)
+        model = changes.get("model", vehicle.model)
+        if (make, model) != (vehicle.make, vehicle.model):
+            clash = self._repository.find_by_model(make, model)
+            if clash is not None and clash.id != vehicle.id:
+                raise DuplicateListingError(f"{make} {model} is already listed")
+
         for field, value in changes.items():
             setattr(vehicle, field, value)
         return self._repository.save(vehicle)
 
     def delete(self, vehicle_id: str) -> None:
-        """Remove a vehicle, raising if the id is unknown."""
+        """Remove a listing and the cars it holds."""
         self._repository.delete(self.get(vehicle_id))
 
     def search(
@@ -59,7 +78,7 @@ class VehicleService:
         min_price: float | None = None,
         max_price: float | None = None,
     ) -> list[Vehicle]:
-        """Find vehicles matching the supplied filters, sold out or not."""
+        """Find listings matching the supplied filters."""
         return self._repository.search(
             make=make,
             model=model,

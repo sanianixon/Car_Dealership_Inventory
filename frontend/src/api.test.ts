@@ -101,8 +101,15 @@ describe("error handling", () => {
         make: "",
         model: "X",
         category: "Y",
-        price: -1,
-        quantity: 1,
+        units: [
+          {
+            year: 2023,
+            colour: "Red",
+            price: -1,
+            ownershipNumber: 1,
+            acquiredOn: "2026-03-14",
+          },
+        ],
       });
     } catch (error) {
       caught = error as ApiError;

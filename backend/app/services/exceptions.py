@@ -29,6 +29,16 @@ class OutOfStockError(DomainError):
     message = "Vehicle is out of stock"
 
 
-class InsufficientStockError(DomainError):
+class UnitNotFoundError(DomainError):
+    status_code = status.HTTP_404_NOT_FOUND
+    message = "That vehicle is not listed under this model"
+
+
+class UnitNotAvailableError(DomainError):
     status_code = status.HTTP_409_CONFLICT
-    message = "Not enough stock available"
+    message = "That vehicle has already been sold"
+
+
+class DuplicateListingError(DomainError):
+    status_code = status.HTTP_409_CONFLICT
+    message = "That model is already listed"

@@ -1,52 +1,141 @@
-/** Add units to a vehicle's stock. Admin only. */
+/**
+ * Take another car of this model onto the lot. Admin only.
+ *
+ * Restocking a used-car dealership is not raising a number: it is a specific
+ * car arriving, with its own year, colour, history and price. One car at a
+ * time, because that is how they arrive.
+ */
 
 import { useState, type FormEvent } from "react";
 
 import { ApiError } from "../api";
-import type { Vehicle } from "../types";
+import type { UnitDraft, Vehicle } from "../types";
+
+const FIELD =
+  "w-full border border-ink-200 bg-surface px-3 py-2.5 text-ink-900 " +
+  "focus:border-clay-600 focus:outline-none";
+const LABEL = "mb-1 block text-xs font-semibold uppercase tracking-widest text-ink-500";
 
 interface Props {
   vehicle: Vehicle;
   error: ApiError | Error | null;
   busy: boolean;
-  onSubmit: (quantity: number) => void;
+  onSubmit: (units: UnitDraft[]) => void;
 }
 
 export function RestockForm({ vehicle, error, busy, onSubmit }: Props) {
-  const [quantity, setQuantity] = useState("1");
+  const [year, setYear] = useState("");
+  const [colour, setColour] = useState("");
+  const [price, setPrice] = useState("");
+  const [owners, setOwners] = useState("1");
+  const [acquiredOn, setAcquiredOn] = useState(new Date().toISOString().slice(0, 10));
+
+  const fieldError = (path: string) =>
+    error instanceof ApiError
+      ? error.fieldError(path) ?? error.fieldError(`units.0.${path}`)
+      : undefined;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onSubmit(Number(quantity));
+    onSubmit([
+      {
+        year: Number(year),
+        colour: colour.trim(),
+        price: Number(price),
+        ownershipNumber: Number(owners),
+        acquiredOn,
+      },
+    ]);
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-      <p className="text-sm text-forecourt-500">
+      <p className="text-sm text-ink-500">
         {vehicle.make} {vehicle.model} currently has{" "}
-        <strong className="text-forecourt-900">{vehicle.quantity}</strong> in stock.
+        <strong className="text-ink-900">{vehicle.quantity}</strong> on the lot.
       </p>
 
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="restockYear" className={LABEL}>
+            Build year
+          </label>
+          <input
+            id="restockYear"
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className={FIELD}
+          />
+          {fieldError("year") && (
+            <p className="mt-1.5 text-sm text-clay-700">{fieldError("year")}</p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="restockColour" className={LABEL}>
+            Colour
+          </label>
+          <input
+            id="restockColour"
+            value={colour}
+            onChange={(e) => setColour(e.target.value)}
+            className={FIELD}
+          />
+          {fieldError("colour") && (
+            <p className="mt-1.5 text-sm text-clay-700">{fieldError("colour")}</p>
+          )}
+        </div>
+      </div>
+
       <div>
-        <label htmlFor="restockQuantity" className="mb-1.5 block text-sm font-medium">
-          Units to add
+        <label htmlFor="restockPrice" className={LABEL}>
+          Price (₹)
         </label>
         <input
-          id="restockQuantity"
+          id="restockPrice"
           type="number"
-          min="1"
-          step="1"
-          value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-          className="w-full rounded-lg border border-forecourt-300 px-3 py-2.5 focus:border-petrol-600 focus:outline-none"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          className={FIELD}
         />
-        {error instanceof ApiError && error.fieldError("quantity") && (
-          <p className="mt-1.5 text-sm text-tag-red">{error.fieldError("quantity")}</p>
+        {fieldError("price") && (
+          <p className="mt-1.5 text-sm text-clay-700">{fieldError("price")}</p>
         )}
       </div>
 
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="restockOwners" className={LABEL}>
+            Ownership number
+          </label>
+          <input
+            id="restockOwners"
+            type="number"
+            min="1"
+            value={owners}
+            onChange={(e) => setOwners(e.target.value)}
+            className={FIELD}
+          />
+        </div>
+        <div>
+          <label htmlFor="restockAcquired" className={LABEL}>
+            Date acquired
+          </label>
+          <input
+            id="restockAcquired"
+            type="date"
+            value={acquiredOn}
+            onChange={(e) => setAcquiredOn(e.target.value)}
+            className={FIELD}
+          />
+        </div>
+      </div>
+
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-tag-red">
+        <p
+          role="alert"
+          className="border-l-2 border-clay-600 bg-clay-50 px-3 py-2.5 text-sm text-clay-700"
+        >
           {error.message}
         </p>
       )}
@@ -54,9 +143,9 @@ export function RestockForm({ vehicle, error, busy, onSubmit }: Props) {
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded-lg bg-petrol-600 px-4 py-2.5 font-semibold text-white transition hover:bg-petrol-700 disabled:opacity-60"
+        className="w-full bg-ink-900 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-paper transition hover:bg-clay-600 disabled:opacity-50"
       >
-        {busy ? "Restocking…" : "Add to stock"}
+        {busy ? "Adding…" : "Add this car to the lot"}
       </button>
     </form>
   );

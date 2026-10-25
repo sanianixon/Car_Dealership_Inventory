@@ -12,7 +12,7 @@ from app.services.exceptions import VehicleNotFoundError
 
 
 def require_vehicle(repository: VehicleRepository, vehicle_id: str) -> Vehicle:
-    """Return the vehicle with this id, or raise VehicleNotFoundError."""
+    """Return the listing with this id, or raise VehicleNotFoundError."""
     vehicle = repository.get(vehicle_id)
     if vehicle is None:
         raise VehicleNotFoundError()

@@ -25,6 +25,7 @@ from app.schemas import (
     RestockRequest,
     RestockResponse,
     VehicleCreate,
+    VehicleDetailResponse,
     VehicleListResponse,
     VehicleResponse,
     VehicleSearch,
@@ -42,8 +43,14 @@ def create_vehicle(
     service: VehicleService = Depends(get_vehicle_service),
     _: User = Depends(require_admin),
 ) -> VehicleResponse:
-    """Add a vehicle to the catalogue. Administrators only."""
-    return VehicleResponse(vehicle=service.create(payload.model_dump()))
+    """List a model, together with the cars it is stocked with. Admins only."""
+    vehicle = service.create(
+        make=payload.make,
+        model=payload.model,
+        category=payload.category,
+        units=[unit.model_dump() for unit in payload.units],
+    )
+    return VehicleResponse(vehicle=vehicle)
 
 
 @router.get("", response_model=VehicleListResponse)
@@ -51,7 +58,7 @@ def list_vehicles(
     service: VehicleService = Depends(get_vehicle_service),
     _: User = Depends(get_current_user),
 ) -> VehicleListResponse:
-    """List every vehicle, sold out or not, ordered by make then model."""
+    """List every model, sold out or not, ordered by make then model."""
     return VehicleListResponse(vehicles=service.list_all())
 
 
@@ -72,14 +79,14 @@ def search_vehicles(
     return VehicleListResponse(vehicles=matches)
 
 
-@router.get("/{vehicle_id}", response_model=VehicleResponse)
+@router.get("/{vehicle_id}", response_model=VehicleDetailResponse)
 def get_vehicle(
     vehicle_id: str,
     service: VehicleService = Depends(get_vehicle_service),
     _: User = Depends(get_current_user),
-) -> VehicleResponse:
-    """Fetch one vehicle by id."""
-    return VehicleResponse(vehicle=service.get(vehicle_id))
+) -> VehicleDetailResponse:
+    """Fetch one listing together with the individual cars behind it."""
+    return VehicleDetailResponse(vehicle=service.get(vehicle_id))
 
 
 @router.put("/{vehicle_id}", response_model=VehicleResponse)
@@ -89,7 +96,7 @@ def update_vehicle(
     service: VehicleService = Depends(get_vehicle_service),
     _: User = Depends(require_admin),
 ) -> VehicleResponse:
-    """Apply a partial update to a vehicle. Administrators only."""
+    """Apply a partial update to a listing. Administrators only."""
     return VehicleResponse(vehicle=service.update(vehicle_id, payload.changes()))
 
 
@@ -99,7 +106,7 @@ def delete_vehicle(
     service: VehicleService = Depends(get_vehicle_service),
     _: User = Depends(require_admin),
 ) -> Response:
-    """Delete a vehicle. Administrators only."""
+    """Delete a listing and the cars it holds. Administrators only."""
     service.delete(vehicle_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -111,9 +118,9 @@ def purchase_vehicle(
     service: InventoryService = Depends(get_inventory_service),
     _: User = Depends(get_current_user),
 ) -> PurchaseResponse:
-    """Buy one or more units, decreasing the stock."""
-    vehicle = service.purchase(vehicle_id, payload.quantity)
-    return PurchaseResponse(vehicle=vehicle, purchased=payload.quantity)
+    """Buy one car of this model: a named one, or the cheapest available."""
+    vehicle, unit = service.purchase(vehicle_id, payload.unit_id)
+    return PurchaseResponse(vehicle=vehicle, unit=unit)
 
 
 @router.post("/{vehicle_id}/restock", response_model=RestockResponse)
@@ -123,6 +130,8 @@ def restock_vehicle(
     service: InventoryService = Depends(get_inventory_service),
     _: User = Depends(require_admin),
 ) -> RestockResponse:
-    """Add units to a vehicle's stock. Administrators only."""
-    vehicle = service.restock(vehicle_id, payload.quantity)
-    return RestockResponse(vehicle=vehicle, restocked=payload.quantity)
+    """Take more cars of this model onto the lot. Administrators only."""
+    vehicle, units = service.restock(
+        vehicle_id, [unit.model_dump() for unit in payload.units]
+    )
+    return RestockResponse(vehicle=vehicle, restocked=len(units), units=units)

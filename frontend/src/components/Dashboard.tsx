@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, api } from "../api";
 import { useAuth } from "../auth-context";
-import { EMPTY_FILTERS, type SearchFilters, type Vehicle } from "../types";
+import { EMPTY_FILTERS, type SearchFilters, type UnitDraft, type Vehicle } from "../types";
 import { SearchBar } from "./SearchBar";
 import { Modal } from "./Modal";
 import { RestockForm } from "./RestockForm";
@@ -83,31 +83,6 @@ export function Dashboard() {
     void loadAll();
   }
 
-  async function handlePurchase(vehicle: Vehicle) {
-    setBusyId(vehicle.id);
-    setActionError(null);
-    setNotice(null);
-    try {
-      const { vehicle: updated, purchased } = await api.purchase(vehicle.id, 1);
-      replace(updated);
-      setNotice(`Purchased ${purchased} × ${updated.make} ${updated.model}.`);
-    } catch (caught) {
-      setActionError((caught as Error).message);
-      // A rejected purchase usually means someone else got there first, so
-      // refresh that row to show the real stock rather than a stale number.
-      try {
-        const { vehicle: fresh } = await api.listVehicles().then(({ vehicles: all }) => ({
-          vehicle: all.find((candidate) => candidate.id === vehicle.id),
-        }));
-        if (fresh) replace(fresh);
-      } catch {
-        // Leave the list as it is; the error message is already shown.
-      }
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function handleDelete(vehicle: Vehicle) {
     const confirmed = window.confirm(
       `Delete ${vehicle.make} ${vehicle.model}? This cannot be undone.`,
@@ -133,7 +108,7 @@ export function Dashboard() {
     setDialogError(null);
   }
 
-  async function submitVehicle(values: Record<string, string | number>) {
+  async function submitVehicle(values: Record<string, unknown>) {
     if (dialog === null) return;
 
     setDialogBusy(true);
@@ -141,7 +116,7 @@ export function Dashboard() {
     try {
       if (dialog.kind === "create") {
         const { vehicle: created } = await api.createVehicle(
-          values as unknown as Omit<Vehicle, "id" | "createdAt" | "updatedAt">,
+          values as unknown as Parameters<typeof api.createVehicle>[0],
         );
         // Keep the list ordered by make then model, as the API returns it.
         setVehicles((current) =>
@@ -151,7 +126,7 @@ export function Dashboard() {
         );
         setNotice(`Added ${created.make} ${created.model}.`);
       } else if (dialog.kind === "edit") {
-        const { vehicle: updated } = await api.updateVehicle(dialog.vehicle.id, values);
+        const { vehicle: updated } = await api.updateVehicle(dialog.vehicle.id, values as Parameters<typeof api.updateVehicle>[1]);
         replace(updated);
         setNotice(`Updated ${updated.make} ${updated.model}.`);
       }
@@ -163,15 +138,17 @@ export function Dashboard() {
     }
   }
 
-  async function submitRestock(quantity: number) {
+  async function submitRestock(units: UnitDraft[]) {
     if (dialog?.kind !== "restock") return;
 
     setDialogBusy(true);
     setDialogError(null);
     try {
-      const { vehicle: updated, restocked } = await api.restock(dialog.vehicle.id, quantity);
+      const { vehicle: updated, restocked } = await api.restock(dialog.vehicle.id, units);
       replace(updated);
-      setNotice(`Restocked ${updated.make} ${updated.model} by ${restocked}.`);
+      setNotice(
+        `Took ${restocked} more ${updated.make} ${updated.model} onto the lot.`,
+      );
       setDialog(null);
     } catch (caught) {
       setDialogError(caught as Error);
@@ -181,27 +158,25 @@ export function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-forecourt-50">
-      <header className="border-b border-forecourt-100 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-petrol-600 text-sm font-bold text-white">
-              CD
-            </div>
-            <span className="font-bold tracking-tight">Car Dealership Inventory</span>
-          </div>
+    <div className="min-h-screen bg-paper">
+      <header className="border-b border-ink-200 bg-surface">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-5 sm:px-6">
+          {/* A wordmark rather than a monogram tile: the name is the mark. */}
+          <span className="text-sm font-extrabold uppercase tracking-[0.25em] text-ink-900">
+            Car Dealership
+          </span>
 
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden text-sm text-forecourt-500 sm:inline">{user?.email}</span>
+          <div className="ml-auto flex items-center gap-4">
+            <span className="hidden text-sm text-ink-500 sm:inline">{user?.email}</span>
             {isAdmin && (
-              <span className="rounded-full bg-petrol-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+              <span className="border border-clay-600 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-[0.15em] text-clay-700">
                 Admin
               </span>
             )}
             <button
               type="button"
               onClick={signOut}
-              className="rounded-lg border border-forecourt-300 px-3 py-1.5 text-sm font-semibold transition hover:bg-forecourt-100"
+              className="border border-ink-200 px-3 py-1.5 text-sm font-semibold transition hover:bg-ink-100"
             >
               Sign out
             </button>
@@ -213,7 +188,7 @@ export function Dashboard() {
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Forecourt</h1>
-            <p className="mt-1 text-sm text-forecourt-500">
+            <p className="mt-1 text-sm text-ink-500">
               {loading ? "Loading…" : `${vehicles.length} vehicles`}
             </p>
           </div>
@@ -221,7 +196,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => openDialog({ kind: "create" })}
-              className="rounded-lg bg-petrol-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-petrol-700"
+              className="bg-ink-900 px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-ink-700"
             >
               + Add vehicle
             </button>
@@ -237,25 +212,25 @@ export function Dashboard() {
         />
 
         {notice && (
-          <p className="mb-4 rounded-lg bg-petrol-50 px-4 py-3 text-sm font-medium text-petrol-700">
+          <p className="mb-4 bg-clay-50 px-4 py-3 text-sm font-medium text-clay-700">
             {notice}
           </p>
         )}
         {actionError && (
-          <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-tag-red">
+          <p role="alert" className="mb-4 bg-red-50 px-4 py-3 text-sm font-medium text-clay-700">
             {actionError}
           </p>
         )}
         {listError && (
-          <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-tag-red">
+          <p role="alert" className="mb-4 bg-red-50 px-4 py-3 text-sm font-medium text-clay-700">
             {listError}
           </p>
         )}
 
         {!loading && vehicles.length === 0 && listError === null && (
-          <div className="rounded-2xl border border-dashed border-forecourt-300 bg-white px-6 py-16 text-center">
+          <div className="border border-dashed border-ink-200 bg-surface px-6 py-16 text-center">
             <p className="font-semibold">No vehicles match those filters.</p>
-            <p className="mt-1 text-sm text-forecourt-500">
+            <p className="mt-1 text-sm text-ink-500">
               Try widening the search, or clear the filters to see everything.
             </p>
           </div>
@@ -268,7 +243,6 @@ export function Dashboard() {
               vehicle={vehicle}
               isAdmin={isAdmin}
               busy={busyId === vehicle.id}
-              onPurchase={handlePurchase}
               onEdit={(target) => openDialog({ kind: "edit", vehicle: target })}
               onRestock={(target) => openDialog({ kind: "restock", vehicle: target })}
               onDelete={handleDelete}

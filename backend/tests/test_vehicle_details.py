@@ -1,98 +1,109 @@
-"""Tests for the provenance fields a buyer wants before committing.
+"""Tests for the individual cars behind a listing.
 
-A price and a stock count are not enough to choose a used car. These cover the
-build year, the colours on the lot, how many owners the car has had, and when
-the dealership took it in.
+Build year, colour, ownership and acquisition date describe one car, not a
+model. These cover that they are stored per car, and that a listing's price,
+stock and colours are derived from its cars rather than stored alongside them.
 """
 
 from datetime import date, timedelta
 
-DETAILED = {
-    "make": "Maruti",
-    "model": "Swift",
-    "category": "Hatchback",
-    "price": 650000.0,
-    "quantity": 4,
-    "year": 2021,
-    "colours": ["Pearl White", "Fire Red"],
+ACQUIRED = (date.today() - timedelta(days=30)).isoformat()
+
+UNIT = {
+    "year": 2022,
+    "colour": "Pearl White",
+    "price": 1180000.0,
     "ownershipNumber": 1,
-    "acquiredOn": "2026-03-14",
+    "acquiredOn": ACQUIRED,
 }
+
+LISTING = {"make": "Honda", "model": "City", "category": "Sedan", "units": [UNIT]}
 
 
 def _admin(auth):
     return auth(email="boss@dealership.com", admin=True)
 
 
-def test_create_stores_and_returns_the_detail_fields(client, auth):
-    res = client.post("/api/vehicles", json=DETAILED, headers=_admin(auth))
+def test_each_car_keeps_its_own_history(client, auth):
+    """The point of the whole two-level model.
 
+    Four Citys on a forecourt are four different cars: different years,
+    colours, owners and prices. Before this they shared one row and therefore
+    one history, which was nonsense.
+    """
+    res = client.post(
+        "/api/vehicles",
+        json={
+            **LISTING,
+            "units": [
+                {**UNIT, "year": 2021, "colour": "Golden Brown", "ownershipNumber": 3,
+                 "price": 980000.0},
+                {**UNIT, "year": 2023, "colour": "Radiant Red", "ownershipNumber": 1,
+                 "price": 1340000.0},
+            ],
+        },
+        headers=_admin(auth),
+    )
     assert res.status_code == 201
-    vehicle = res.json()["vehicle"]
-    assert vehicle["year"] == 2021
-    assert vehicle["colours"] == ["Pearl White", "Fire Red"]
-    assert vehicle["ownershipNumber"] == 1
-    assert vehicle["acquiredOn"] == "2026-03-14"
+
+    detail = client.get(
+        f"/api/vehicles/{res.json()['vehicle']['id']}", headers=auth()
+    ).json()["vehicle"]
+
+    by_year = {unit["year"]: unit for unit in detail["units"]}
+    assert by_year[2021]["colour"] == "Golden Brown"
+    assert by_year[2021]["ownershipNumber"] == 3
+    assert by_year[2021]["price"] == 980000.0
+    assert by_year[2023]["colour"] == "Radiant Red"
+    assert by_year[2023]["ownershipNumber"] == 1
 
 
-def test_details_survive_a_round_trip_through_the_list(client, auth):
-    client.post("/api/vehicles", json=DETAILED, headers=_admin(auth))
+def test_the_listing_price_follows_the_cheapest_available_car(client, auth, add_vehicle):
+    vehicle = add_vehicle(units=[{"price": 1340000.0}, {"price": 980000.0}])
 
     listed = client.get("/api/vehicles", headers=auth()).json()["vehicles"][0]
 
-    assert listed["colours"] == ["Pearl White", "Fire Red"]
-    assert listed["year"] == 2021
+    assert listed["price"] == 980000.0
+    assert vehicle["price"] == 980000.0
 
 
-def test_a_single_colour_is_accepted(client, auth):
-    res = client.post(
-        "/api/vehicles",
-        json={**DETAILED, "colours": ["Midnight Blue"]},
-        headers=_admin(auth),
+def test_colours_are_the_distinct_colours_actually_in_stock(client, auth, add_vehicle):
+    add_vehicle(
+        units=[{"colour": "Radiant Red"}, {"colour": "Pearl White"}, {"colour": "Radiant Red"}]
     )
 
-    assert res.status_code == 201
-    assert res.json()["vehicle"]["colours"] == ["Midnight Blue"]
+    listed = client.get("/api/vehicles", headers=auth()).json()["vehicles"][0]
+
+    # Three cars, two colours, listed once each and in order.
+    assert listed["colours"] == ["Pearl White", "Radiant Red"]
 
 
-def test_colours_cannot_be_empty(client, auth):
-    """A vehicle on the forecourt is some colour; an empty list is a mistake."""
-    res = client.post(
-        "/api/vehicles", json={**DETAILED, "colours": []}, headers=_admin(auth)
+def test_a_sold_car_stops_counting_towards_the_listing(client, auth, add_vehicle):
+    vehicle = add_vehicle(units=[{"price": 980000.0}, {"price": 1340000.0}])
+    cheapest = vehicle["unitIds"][0]
+
+    client.post(
+        f"/api/vehicles/{vehicle['id']}/purchase",
+        json={"unitId": cheapest},
+        headers=auth(),
     )
 
-    assert res.status_code == 400
-    assert "colours" in [d["path"] for d in res.json()["error"]["details"]]
-
-
-def test_blank_colour_names_are_rejected(client, auth):
-    res = client.post(
-        "/api/vehicles",
-        json={**DETAILED, "colours": ["Pearl White", "   "]},
-        headers=_admin(auth),
-    )
-
-    assert res.status_code == 400
-
-
-def test_duplicate_colours_are_collapsed(client, auth):
-    """Listing the same colour twice is noise, not information."""
-    res = client.post(
-        "/api/vehicles",
-        json={**DETAILED, "colours": ["Red", "red", " Red "]},
-        headers=_admin(auth),
-    )
-
-    assert res.status_code == 201
-    assert res.json()["vehicle"]["colours"] == ["Red"]
+    listed = client.get("/api/vehicles", headers=auth()).json()["vehicles"][0]
+    assert listed["quantity"] == 1
+    # The advertised price rises, because the cheap one has gone.
+    assert listed["price"] == 1340000.0
 
 
 def test_year_must_be_plausible(client, auth):
     headers = _admin(auth)
 
-    too_old = client.post("/api/vehicles", json={**DETAILED, "year": 1799}, headers=headers)
+    too_old = client.post(
+        "/api/vehicles", json={**LISTING, "units": [{**UNIT, "year": 1799}]}, headers=headers
+    )
     too_new = client.post(
-        "/api/vehicles", json={**DETAILED, "year": date.today().year + 5}, headers=headers
+        "/api/vehicles",
+        json={**LISTING, "units": [{**UNIT, "year": date.today().year + 5}]},
+        headers=headers,
     )
 
     assert too_old.status_code == 400
@@ -102,7 +113,7 @@ def test_year_must_be_plausible(client, auth):
 def test_next_year_is_allowed_because_new_models_arrive_early(client, auth):
     res = client.post(
         "/api/vehicles",
-        json={**DETAILED, "year": date.today().year + 1},
+        json={**LISTING, "units": [{**UNIT, "year": date.today().year + 1}]},
         headers=_admin(auth),
     )
 
@@ -112,72 +123,78 @@ def test_next_year_is_allowed_because_new_models_arrive_early(client, auth):
 def test_ownership_number_starts_at_one(client, auth):
     headers = _admin(auth)
 
-    assert (
-        client.post(
-            "/api/vehicles", json={**DETAILED, "ownershipNumber": 0}, headers=headers
-        ).status_code
-        == 400
-    )
-    assert (
-        client.post(
-            "/api/vehicles", json={**DETAILED, "ownershipNumber": -1}, headers=headers
-        ).status_code
-        == 400
-    )
+    for invalid in (0, -1):
+        res = client.post(
+            "/api/vehicles",
+            json={**LISTING, "units": [{**UNIT, "ownershipNumber": invalid}]},
+            headers=headers,
+        )
+        assert res.status_code == 400
 
 
-def test_a_vehicle_cannot_have_arrived_in_the_future(client, auth):
+def test_ownership_defaults_to_the_first_owner(client, auth):
+    unit = {key: value for key, value in UNIT.items() if key != "ownershipNumber"}
+
+    res = client.post(
+        "/api/vehicles", json={**LISTING, "units": [unit]}, headers=_admin(auth)
+    )
+
+    assert res.status_code == 201
+    detail = client.get(
+        f"/api/vehicles/{res.json()['vehicle']['id']}", headers=auth()
+    ).json()["vehicle"]
+    assert detail["units"][0]["ownershipNumber"] == 1
+
+
+def test_a_car_cannot_have_arrived_in_the_future(client, auth):
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
     res = client.post(
-        "/api/vehicles", json={**DETAILED, "acquiredOn": tomorrow}, headers=_admin(auth)
+        "/api/vehicles",
+        json={**LISTING, "units": [{**UNIT, "acquiredOn": tomorrow}]},
+        headers=_admin(auth),
     )
 
     assert res.status_code == 400
-    assert "acquiredOn" in [d["path"] for d in res.json()["error"]["details"]]
 
 
 def test_today_is_a_valid_acquisition_date(client, auth):
     res = client.post(
         "/api/vehicles",
-        json={**DETAILED, "acquiredOn": date.today().isoformat()},
+        json={**LISTING, "units": [{**UNIT, "acquiredOn": date.today().isoformat()}]},
         headers=_admin(auth),
     )
 
     assert res.status_code == 201
 
 
-def test_colours_sent_as_a_bare_string_is_a_clean_400(client, auth):
-    """The cleaning step must hand a wrong type back, not try to trim it."""
-    res = client.post(
-        "/api/vehicles", json={**DETAILED, "colours": "Red"}, headers=_admin(auth)
-    )
-
-    assert res.status_code == 400
-    assert "colours" in [d["path"] for d in res.json()["error"]["details"]]
-
-
-def test_a_non_string_colour_is_a_clean_400(client, auth):
+def test_a_blank_colour_is_rejected(client, auth):
     res = client.post(
         "/api/vehicles",
-        json={**DETAILED, "colours": ["Red", 7]},
+        json={**LISTING, "units": [{**UNIT, "colour": "   "}]},
         headers=_admin(auth),
     )
 
     assert res.status_code == 400
 
 
-def test_colours_can_be_updated(client, auth):
-    headers = _admin(auth)
-    created = client.post("/api/vehicles", json=DETAILED, headers=headers).json()["vehicle"]
-
-    res = client.put(
-        f"/api/vehicles/{created['id']}",
-        json={"colours": ["Granite Grey"]},
-        headers=headers,
+def test_a_price_sent_as_a_string_is_rejected(client, auth):
+    """Pydantic would coerce "1180000" happily; silently accepting a string
+    hides a bug in the caller, so the API contract insists on a JSON number."""
+    res = client.post(
+        "/api/vehicles",
+        json={**LISTING, "units": [{**UNIT, "price": "1180000"}]},
+        headers=_admin(auth),
     )
 
-    assert res.status_code == 200
-    assert res.json()["vehicle"]["colours"] == ["Granite Grey"]
-    # The fields not mentioned must be untouched.
-    assert res.json()["vehicle"]["year"] == 2021
+    assert res.status_code == 400
+
+
+def test_a_year_sent_as_a_string_is_rejected(client, auth):
+    res = client.post(
+        "/api/vehicles",
+        json={**LISTING, "units": [{**UNIT, "year": "2022"}]},
+        headers=_admin(auth),
+    )
+
+    assert res.status_code == 400

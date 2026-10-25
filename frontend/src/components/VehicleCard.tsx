@@ -1,116 +1,126 @@
 /**
- * One vehicle, presented as a forecourt hang-tag.
+ * One listing — a model the dealership stocks — as a forecourt ticket.
+ *
+ * It advertises the cheapest car available ("from ₹6,20,000"), how many are on
+ * the lot and which colours, because that is what a model-level card can
+ * honestly say. The cars themselves differ in year, owner and price, so
+ * choosing one happens on the model's own page.
  *
  * The Purchase button is disabled when nothing is in stock, which the brief
- * requires. It is also made obvious: a greyed-out button alone leaves people
- * clicking at it, so the card is dimmed and the stock line says "Sold out".
+ * requires. When stock exists it opens the model page to pick a specific car,
+ * since "buy a Honda City" is not a complete instruction when four different
+ * Citys are on the lot.
  */
 
-import type { Vehicle } from "../types";
+import { useNavigate } from "react-router-dom";
 
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+import { formatPrice } from "../format";
+import type { Vehicle } from "../types";
 
 /** Low stock is called out so a buyer can see urgency without counting. */
 function stockLabel(quantity: number): { text: string; className: string } {
-  if (quantity === 0) return { text: "Sold out", className: "text-tag-red" };
-  if (quantity <= 2)
-    return { text: `Only ${quantity} left`, className: "text-tag-amber" };
-  return { text: `${quantity} in stock`, className: "text-forecourt-500" };
+  if (quantity === 0) return { text: "Sold out", className: "text-signal-out" };
+  if (quantity <= 2) return { text: `Only ${quantity} left`, className: "text-signal-low" };
+  return { text: `${quantity} in stock`, className: "text-ink-500" };
 }
 
 interface Props {
   vehicle: Vehicle;
   isAdmin: boolean;
   busy: boolean;
-  onPurchase: (vehicle: Vehicle) => void;
   onEdit: (vehicle: Vehicle) => void;
   onDelete: (vehicle: Vehicle) => void;
   onRestock: (vehicle: Vehicle) => void;
 }
 
-export function VehicleCard({
-  vehicle,
-  isAdmin,
-  busy,
-  onPurchase,
-  onEdit,
-  onDelete,
-  onRestock,
-}: Props) {
+export function VehicleCard({ vehicle, isAdmin, busy, onEdit, onDelete, onRestock }: Props) {
+  const navigate = useNavigate();
   const soldOut = vehicle.quantity === 0;
   const stock = stockLabel(vehicle.quantity);
 
   return (
     <article
       className={
-        "flex flex-col rounded-2xl border bg-white p-5 shadow-sm transition " +
+        "group flex flex-col border bg-surface p-6 transition " +
         (soldOut
-          ? "border-forecourt-100 opacity-75"
-          : "border-forecourt-100 hover:border-petrol-200 hover:shadow-md")
+          ? "border-ink-100 bg-paper"
+          : "border-ink-200 hover:border-ink-900 hover:shadow-[0_8px_0_-4px_rgba(20,24,27,0.08)]")
       }
     >
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-lg font-bold leading-tight text-forecourt-900">
-            {vehicle.make} {vehicle.model}
-          </h3>
-          <span className="mt-1.5 inline-block rounded-full bg-petrol-50 px-2.5 py-0.5 text-xs font-semibold text-petrol-700">
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink-500">
+          {vehicle.make}
+        </p>
+        <h3 className="mt-1 truncate text-xl font-bold leading-tight tracking-tight text-ink-900">
+          {vehicle.model}
+        </h3>
+      </header>
+
+      <div className="mb-6 mt-auto">
+        {soldOut ? (
+          <p className="tabular text-3xl font-extrabold leading-none tracking-tighter text-ink-300">
+            —
+          </p>
+        ) : (
+          <>
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-ink-500">
+              From
+            </p>
+            <p className="tabular text-4xl font-extrabold leading-none tracking-tighter text-ink-900">
+              {formatPrice(vehicle.price)}
+            </p>
+          </>
+        )}
+
+        {vehicle.colours.length > 0 && (
+          <p className="mt-3 truncate text-xs text-ink-500">
+            {vehicle.colours.join(" · ")}
+          </p>
+        )}
+
+        <div className="mt-3 flex items-center justify-between border-t border-ink-100 pt-3">
+          <span className="text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-ink-500">
             {vehicle.category}
           </span>
+          <span className={"text-xs font-semibold " + stock.className}>{stock.text}</span>
         </div>
-        {/* The punched hole of a hang-tag. Decorative only. */}
-        <div
-          aria-hidden="true"
-          className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-forecourt-300"
-        />
-      </div>
-
-      <div className="mb-4 mt-auto">
-        <p className="text-2xl font-bold tracking-tight text-forecourt-900">
-          {money.format(vehicle.price)}
-        </p>
-        <p className={"mt-1 text-sm font-medium " + stock.className}>{stock.text}</p>
       </div>
 
       <button
         type="button"
-        onClick={() => onPurchase(vehicle)}
+        onClick={() => navigate(`/vehicles/${vehicle.id}`)}
         disabled={soldOut || busy}
-        title={soldOut ? "This vehicle is out of stock" : undefined}
+        title={soldOut ? "This vehicle is out of stock" : "Choose which car to buy"}
         className={
-          "w-full rounded-lg px-4 py-2.5 font-semibold transition " +
+          "w-full px-4 py-3 text-xs font-semibold uppercase tracking-widest transition " +
           (soldOut
-            ? "cursor-not-allowed bg-forecourt-100 text-forecourt-500"
-            : "bg-petrol-600 text-white hover:bg-petrol-700 disabled:opacity-60")
+            ? "cursor-not-allowed border border-ink-200 text-ink-300"
+            : "bg-ink-900 text-paper hover:bg-clay-600 disabled:opacity-50")
         }
       >
-        {soldOut ? "Out of stock" : busy ? "Working…" : "Purchase"}
+        {soldOut ? "Out of stock" : "Purchase"}
       </button>
 
       {isAdmin && (
-        <div className="mt-3 flex gap-2 border-t border-forecourt-100 pt-3">
+        <div className="mt-4 flex gap-4 border-t border-ink-100 pt-4 text-xs font-semibold uppercase tracking-wider">
           <button
             type="button"
             onClick={() => onEdit(vehicle)}
-            className="flex-1 rounded-md px-2 py-1.5 text-sm font-medium text-forecourt-700 transition hover:bg-forecourt-100"
+            className="text-ink-500 transition hover:text-ink-900"
           >
             Edit
           </button>
           <button
             type="button"
             onClick={() => onRestock(vehicle)}
-            className="flex-1 rounded-md px-2 py-1.5 text-sm font-medium text-petrol-700 transition hover:bg-petrol-50"
+            className="text-ink-500 transition hover:text-ink-900"
           >
             Restock
           </button>
           <button
             type="button"
             onClick={() => onDelete(vehicle)}
-            className="flex-1 rounded-md px-2 py-1.5 text-sm font-medium text-tag-red transition hover:bg-red-50"
+            className="ml-auto text-ink-500 transition hover:text-clay-600"
           >
             Delete
           </button>

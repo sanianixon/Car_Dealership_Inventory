@@ -73,46 +73,61 @@ def db(temp_db: sessionmaker) -> Iterator[Session]:
 
 @pytest.fixture()
 def add_vehicle(db):
-    """Factory putting a vehicle straight into the database.
+    """Factory putting a listing and its cars straight into the database.
 
-    Test fixtures are built here rather than through POST /api/vehicles so that
-    a test needing stock to exist does not also depend on who is allowed to
-    create it. Tests of the create endpoint itself still go through the API.
+    Test fixtures are built here rather than through POST /api/vehicles so a
+    test needing stock to exist does not also depend on who may create it.
+    Tests of the create endpoint itself still go through the API.
 
-    Returns the vehicle as a dict, matching what the API would return, so a
-    test can read vehicle["id"] either way.
+    `units` is either a count of near-identical cars or a list of per-car
+    overrides, so a test can say "three Citys" or "one at 6 lakh and one at 9".
     """
-    from app.models import Vehicle
+    from app.models import Vehicle, VehicleUnit
 
-    defaults = {
-        "make": "Toyota",
-        "model": "Corolla",
-        "category": "Sedan",
-        "price": 650000.0,
-        "quantity": 4,
-        "year": 2021,
-        "colours": ["Pearl White"],
+    unit_defaults = {
+        "year": 2022,
+        "colour": "Pearl White",
         "ownership_number": 1,
         # Relative, so the suite stays valid however long from now it runs.
         "acquired_on": date.today() - timedelta(days=30),
+        "price": 650000.0,
     }
 
-    def _add(**overrides) -> dict:
-        vehicle = Vehicle(**{**defaults, **overrides})
+    def _add(
+        make: str = "Honda",
+        model: str = "City",
+        category: str = "Sedan",
+        units: int | list[dict] = 1,
+        **unit_overrides,
+    ) -> dict:
+        specs = [{} for _ in range(units)] if isinstance(units, int) else units
+        built = [
+            VehicleUnit(**{**unit_defaults, **unit_overrides, **spec}) for spec in specs
+        ]
+
+        vehicle = Vehicle(make=make, model=model, category=category, units=built)
         db.add(vehicle)
         db.commit()
         db.refresh(vehicle)
+
         return {
             "id": vehicle.id,
             "make": vehicle.make,
             "model": vehicle.model,
             "category": vehicle.category,
-            "price": vehicle.price,
             "quantity": vehicle.quantity,
-            "year": vehicle.year,
-            "colours": vehicle.colours,
-            "ownershipNumber": vehicle.ownership_number,
-            "acquiredOn": vehicle.acquired_on.isoformat(),
+            "price": vehicle.price,
+            "unitIds": [unit.id for unit in vehicle.units],
+            "units": [
+                {
+                    "id": unit.id,
+                    "price": unit.price,
+                    "colour": unit.colour,
+                    "year": unit.year,
+                    "ownershipNumber": unit.ownership_number,
+                }
+                for unit in vehicle.units
+            ],
         }
 
     return _add

@@ -1,102 +1,201 @@
 /**
- * Add or edit a vehicle. Admin only.
+ * Add or edit a listing. Admin only.
  *
- * On edit this sends only the fields that actually changed, which is why the
- * API accepts a partial body: an untouched field is not resubmitted and so
- * cannot be clobbered by a stale value.
+ * Creating a listing means listing a model *and* the first car of it, because
+ * a model with no cars would show as sold out the moment it existed. Further
+ * cars are taken in through Restock.
+ *
+ * Editing touches only the listing's own fields. A car's year, colour, price
+ * or history is not editable here: it describes that car, not the model.
  */
 
 import { useState, type FormEvent } from "react";
 
 import { ApiError } from "../api";
-import type { Vehicle } from "../types";
+import type { UnitDraft, Vehicle } from "../types";
 
-export interface VehicleDraft {
-  make: string;
-  model: string;
-  category: string;
-  price: string;
-  quantity: string;
-}
-
-const BLANK: VehicleDraft = { make: "", model: "", category: "", price: "", quantity: "" };
-
-function draftFrom(vehicle: Vehicle | null): VehicleDraft {
-  if (vehicle === null) return BLANK;
-  return {
-    make: vehicle.make,
-    model: vehicle.model,
-    category: vehicle.category,
-    price: String(vehicle.price),
-    quantity: String(vehicle.quantity),
-  };
-}
-
-const FIELDS: { key: keyof VehicleDraft; label: string; type: string }[] = [
-  { key: "make", label: "Make", type: "text" },
-  { key: "model", label: "Model", type: "text" },
-  { key: "category", label: "Category", type: "text" },
-  { key: "price", label: "Price", type: "number" },
-  { key: "quantity", label: "Quantity in stock", type: "number" },
-];
+const FIELD =
+  "w-full border border-ink-200 bg-surface px-3 py-2.5 text-ink-900 " +
+  "placeholder:text-ink-300 focus:border-clay-600 focus:outline-none";
+const LABEL = "mb-1 block text-xs font-semibold uppercase tracking-widest text-ink-500";
 
 interface Props {
-  /** null means "create a new vehicle". */
+  /** null means "list a new model". */
   vehicle: Vehicle | null;
   error: ApiError | Error | null;
   busy: boolean;
-  onSubmit: (values: Record<string, string | number>) => void;
+  onSubmit: (values: Record<string, unknown>) => void;
 }
 
 export function VehicleForm({ vehicle, error, busy, onSubmit }: Props) {
-  const [draft, setDraft] = useState<VehicleDraft>(() => draftFrom(vehicle));
-  const original = draftFrom(vehicle);
+  const creating = vehicle === null;
+
+  const [make, setMake] = useState(vehicle?.make ?? "");
+  const [model, setModel] = useState(vehicle?.model ?? "");
+  const [category, setCategory] = useState(vehicle?.category ?? "");
+
+  const [year, setYear] = useState("");
+  const [colour, setColour] = useState("");
+  const [price, setPrice] = useState("");
+  const [owners, setOwners] = useState("1");
+  const [acquiredOn, setAcquiredOn] = useState(new Date().toISOString().slice(0, 10));
 
   const fieldError = (path: string) =>
-    error instanceof ApiError ? error.fieldError(path) : undefined;
+    error instanceof ApiError
+      ? // The server reports a car's field as "units.0.price"; show it against
+        // the input the admin actually typed into.
+        error.fieldError(path) ?? error.fieldError(`units.0.${path}`)
+      : undefined;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    const numeric = new Set(["price", "quantity"]);
-    const values: Record<string, string | number> = {};
-
-    for (const { key } of FIELDS) {
-      const value = draft[key].trim();
-      // On edit, skip anything the user did not touch so the request stays a
-      // genuine partial update.
-      if (vehicle !== null && value === original[key].trim()) continue;
-      if (value === "") continue;
-      values[key] = numeric.has(key) ? Number(value) : value;
+    if (creating) {
+      const unit: UnitDraft = {
+        year: Number(year),
+        colour: colour.trim(),
+        price: Number(price),
+        ownershipNumber: Number(owners),
+        acquiredOn,
+      };
+      onSubmit({ make: make.trim(), model: model.trim(), category: category.trim(), units: [unit] });
+      return;
     }
 
-    onSubmit(values);
+    // On edit, send only what actually changed so the request stays a genuine
+    // partial update and an untouched field cannot be clobbered.
+    const changes: Record<string, unknown> = {};
+    if (make.trim() !== vehicle.make) changes.make = make.trim();
+    if (model.trim() !== vehicle.model) changes.model = model.trim();
+    if (category.trim() !== vehicle.category) changes.category = category.trim();
+    onSubmit(changes);
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-      {FIELDS.map((field) => (
-        <div key={field.key}>
-          <label htmlFor={field.key} className="mb-1.5 block text-sm font-medium">
-            {field.label}
-          </label>
-          <input
-            id={field.key}
-            type={field.type}
-            min={field.type === "number" ? 0 : undefined}
-            step={field.key === "price" ? "0.01" : field.key === "quantity" ? "1" : undefined}
-            value={draft[field.key]}
-            onChange={(event) => setDraft({ ...draft, [field.key]: event.target.value })}
-            className="w-full rounded-lg border border-forecourt-300 px-3 py-2.5 focus:border-petrol-600 focus:outline-none"
-          />
-          {fieldError(field.key) && (
-            <p className="mt-1.5 text-sm text-tag-red">{fieldError(field.key)}</p>
-          )}
-        </div>
-      ))}
+      <div>
+        <label htmlFor="make" className={LABEL}>
+          Make
+        </label>
+        <input id="make" value={make} onChange={(e) => setMake(e.target.value)} className={FIELD} />
+        {fieldError("make") && <p className="mt-1.5 text-sm text-clay-700">{fieldError("make")}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="model" className={LABEL}>
+          Model
+        </label>
+        <input id="model" value={model} onChange={(e) => setModel(e.target.value)} className={FIELD} />
+        {fieldError("model") && (
+          <p className="mt-1.5 text-sm text-clay-700">{fieldError("model")}</p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="category" className={LABEL}>
+          Category
+        </label>
+        <input
+          id="category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className={FIELD}
+        />
+        {fieldError("category") && (
+          <p className="mt-1.5 text-sm text-clay-700">{fieldError("category")}</p>
+        )}
+      </div>
+
+      {creating && (
+        <fieldset className="space-y-4 border-t border-ink-100 pt-4">
+          <legend className="text-xs font-semibold uppercase tracking-widest text-ink-500">
+            The first car of this model
+          </legend>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="year" className={LABEL}>
+                Build year
+              </label>
+              <input
+                id="year"
+                type="number"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                className={FIELD}
+              />
+              {fieldError("year") && (
+                <p className="mt-1.5 text-sm text-clay-700">{fieldError("year")}</p>
+              )}
+            </div>
+            <div>
+              <label htmlFor="colour" className={LABEL}>
+                Colour
+              </label>
+              <input
+                id="colour"
+                value={colour}
+                onChange={(e) => setColour(e.target.value)}
+                className={FIELD}
+              />
+              {fieldError("colour") && (
+                <p className="mt-1.5 text-sm text-clay-700">{fieldError("colour")}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="price" className={LABEL}>
+              Price (₹)
+            </label>
+            <input
+              id="price"
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className={FIELD}
+            />
+            {fieldError("price") && (
+              <p className="mt-1.5 text-sm text-clay-700">{fieldError("price")}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="owners" className={LABEL}>
+                Ownership number
+              </label>
+              <input
+                id="owners"
+                type="number"
+                min="1"
+                value={owners}
+                onChange={(e) => setOwners(e.target.value)}
+                className={FIELD}
+              />
+              <p className="mt-1.5 text-xs text-ink-500">1 is the first owner</p>
+            </div>
+            <div>
+              <label htmlFor="acquiredOn" className={LABEL}>
+                Date acquired
+              </label>
+              <input
+                id="acquiredOn"
+                type="date"
+                value={acquiredOn}
+                onChange={(e) => setAcquiredOn(e.target.value)}
+                className={FIELD}
+              />
+            </div>
+          </div>
+        </fieldset>
+      )}
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-tag-red">
+        <p
+          role="alert"
+          className="border-l-2 border-clay-600 bg-clay-50 px-3 py-2.5 text-sm text-clay-700"
+        >
           {error.message}
         </p>
       )}
@@ -104,9 +203,9 @@ export function VehicleForm({ vehicle, error, busy, onSubmit }: Props) {
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded-lg bg-petrol-600 px-4 py-2.5 font-semibold text-white transition hover:bg-petrol-700 disabled:opacity-60"
+        className="w-full bg-ink-900 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-paper transition hover:bg-clay-600 disabled:opacity-50"
       >
-        {busy ? "Saving…" : vehicle === null ? "Add vehicle" : "Save changes"}
+        {busy ? "Saving…" : creating ? "List this model" : "Save changes"}
       </button>
     </form>
   );

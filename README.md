@@ -5,8 +5,8 @@
 A full-stack vehicle inventory system: a token-authenticated REST API over a real
 database, and a React single-page app for browsing, searching and buying stock.
 
-Built test-first for the Incubyte TDD kata. **126 tests — 91 on the backend at
-99% statement coverage, 35 on the frontend** — and a commit history of 9 RED /
+Built test-first for the Incubyte TDD kata. **139 tests — 91 on the backend at
+99% statement coverage, 48 on the frontend** — and a commit history of 9 RED /
 9 GREEN / 2 refactor steps that shows how the code actually got here.
 
 ---
@@ -30,14 +30,19 @@ Built test-first for the Incubyte TDD kata. **126 tests — 91 on the backend at
 ## What it does
 
 - Register and sign in; every vehicle and inventory route requires a valid JWT.
-- Browse the whole catalogue, including sold-out vehicles, ordered by make then
-  model.
-- Search by make, model, category and price range, combined with AND.
-- Buy a vehicle, which decreases its stock. **Stock can never go negative, even
-  when several buyers act at the same instant** — see
-  [Design decisions](#design-decisions).
-- Administrators can add, edit, delete and restock vehicles. Ordinary users
-  cannot, and are refused by the API, not merely by a hidden button.
+- Browse the catalogue of models, sold out or not, ordered by make then model.
+  Each card advertises the cheapest car available, the colours on the lot and
+  how many are left.
+- Open a model to see **the actual cars** behind it — each with its own build
+  year, colour, owner count, arrival date and price — and buy a specific one.
+- Search by make, model, category and price range, combined with AND. A price
+  filter matches against the cars themselves, so it only finds models with a
+  car in range still for sale.
+- **A car is sold exactly once, even when several buyers reach it at the same
+  instant** — see [Design decisions](#design-decisions).
+- Administrators can list models, edit them, take more cars in and delete.
+  Ordinary users cannot, and are refused by the API, not merely by a hidden
+  button.
 
 ## Stack
 
@@ -46,9 +51,9 @@ Built test-first for the Incubyte TDD kata. **126 tests — 91 on the backend at
 | API | Python 3.11, FastAPI 0.162, SQLAlchemy 2.1 |
 | Database | SQLite file (a real database on disk, not in-memory) |
 | Auth | JWT (PyJWT, HS256) with bcrypt password hashing |
-| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS v4 |
+| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS v4, React Router 7 |
 | Backend tests | pytest 9.1 + pytest-cov — 91 tests, 99% coverage |
-| Frontend tests | Vitest 3.2 + Testing Library + jsdom — 35 tests |
+| Frontend tests | Vitest 3.2 + Testing Library + jsdom — 48 tests |
 
 ## Running it locally
 
@@ -122,7 +127,7 @@ Frontend:
 
 ```bash
 cd frontend
-npm test                                       # 35 tests
+npm test                                       # 48 tests
 npm run test:coverage                          # coverage
 ```
 
@@ -157,7 +162,7 @@ deliberately rather than padded with hollow tests.
 HTTP  ─▶  routers/        request and response shapes, status codes
           services/       business rules, raises domain errors
           repositories/   all SQL; the only layer that holds a Session
-          models.py       ORM tables and database constraints
+          models.py       listings, cars, and database constraints
 ```
 
 Each layer only knows the one beneath it:
@@ -189,28 +194,37 @@ All paths are under `/api`. Every route except register and login needs
 | GET | `/auth/me` | user | | `200 {user}` |
 | GET | `/vehicles` | user | | `200 {vehicles}` |
 | GET | `/vehicles/search` | user | query: `make, model, category, minPrice, maxPrice` | `200 {vehicles}` |
-| GET | `/vehicles/{id}` | user | | `200 {vehicle}` |
-| POST | `/vehicles` | **admin** | the full vehicle (see below) | `201 {vehicle}` |
-| PUT | `/vehicles/{id}` | **admin** | any subset of the above | `200 {vehicle}` |
+| GET | `/vehicles/{id}` | user | | `200 {vehicle}` **with its cars** |
+| POST | `/vehicles` | **admin** | `{make, model, category, units: [car, …]}` | `201 {vehicle}` |
+| PUT | `/vehicles/{id}` | **admin** | any subset of make/model/category | `200 {vehicle}` |
 | DELETE | `/vehicles/{id}` | **admin** | | `204` |
-| POST | `/vehicles/{id}/purchase` | user | `{quantity?}` (default 1) | `200 {vehicle, purchased}` |
-| POST | `/vehicles/{id}/restock` | **admin** | `{quantity}` | `200 {vehicle, restocked}` |
+| POST | `/vehicles/{id}/purchase` | user | `{unitId?}` | `200 {vehicle, unit}` |
+| POST | `/vehicles/{id}/restock` | **admin** | `{units: [car, …]}` | `200 {vehicle, restocked, units}` |
 
-A vehicle carries its provenance as well as its price, because a used car is
-not chosen on price and stock alone:
+The catalogue has two levels, because a dealership's stock has two levels. A
+**listing** is a model; its price and stock are derived from the cars it holds:
 
 ```json
-{ "id": "…", "make": "Hyundai", "model": "Creta", "category": "SUV",
-  "price": 1850000.0, "quantity": 4,
-  "year": 2023,
-  "colours": ["Abyss Black", "Ranger Khaki"],
-  "ownershipNumber": 1,
-  "acquiredOn": "2026-10-16",
+{ "id": "…", "make": "Maruti", "model": "Swift", "category": "Hatchback",
+  "price": 480000.0,
+  "quantity": 4,
+  "colours": ["Fire Red", "Granite Grey", "Lucent Orange", "Pearl White"],
   "createdAt": "…", "updatedAt": "…" }
 ```
 
+`price` is the **cheapest car currently available** — the figure a forecourt
+advertises — and `quantity` is how many are left. Neither is stored, so a card
+can never advertise stock the lot has already sold.
+
+A **car** is one physical vehicle, returned by `GET /api/vehicles/{id}`:
+
+```json
+{ "id": "…", "year": 2019, "colour": "Lucent Orange", "price": 480000.0,
+  "ownershipNumber": 3, "acquiredOn": "2026-07-21", "isAvailable": true }
+```
+
 `ownershipNumber` counts owners the way Indian used-car listings do, where 1 is
-the first owner. `acquiredOn` is the day the dealership took the vehicle in, and
+the first owner. `acquiredOn` is the day the dealership took that car in, and
 cannot be in the future. `year` accepts next year, because new models reach a
 forecourt before their model year starts.
 
@@ -231,20 +245,48 @@ Errors always use one shape, so the frontend has a single thing to parse:
 
 ## Design decisions
 
+### A listing is not a car
+
+The first version of this modelled a vehicle as one row with a `quantity`,
+which is what the brief literally describes. It produced four Honda Citys that
+shared a single build year, a single colour and a single owner history —
+nonsense, because those describe *one car*, not a model.
+
+So the catalogue is two tables. A `Vehicle` is a listing: Honda City, a sedan.
+A `VehicleUnit` is one car on the lot, with its own year, colour, owner count,
+arrival date and price. A listing's `quantity` and `price` are **derived** from
+its available units rather than stored, so the two cannot drift apart: selling
+the cheapest Swift raises the advertised from-price automatically, with no code
+to keep in step.
+
+This diverges from the brief, which specifies a vehicle with a stored
+`quantity`. The read shape is preserved — `GET /api/vehicles` still returns
+`{id, make, model, category, price, quantity}` — so the divergence is in how
+stock is represented, not in what the API promises. It is a deliberate choice
+that a used-car dealership cannot be modelled honestly any other way, and one I
+would rather defend than a catalogue that claims four identical cars.
+
 ### Purchasing is one guarded statement, not read-then-write
 
-The obvious implementation reads the stock, checks it, then writes the new
-figure. Under concurrency that oversells: several buyers pass the check before
-any of them writes. So the check and the write are a single statement, and the
-number of rows it affects is the answer:
+The obvious implementation reads a car, checks it is unsold, then marks it
+sold. Under concurrency that sells the same car twice: several buyers pass the
+check before any of them writes. So the check and the write are a single
+statement, and the number of rows it affects is the answer:
 
 ```sql
-UPDATE vehicles SET quantity = quantity - :n WHERE id = :id AND quantity >= :n
+UPDATE vehicle_units SET sold_at = :now WHERE id = :id AND sold_at IS NULL
 ```
 
-Zero rows affected means the guard refused. It can never mean the stock went
-negative. Only then is the vehicle re-read, to say whether it is empty or merely
-short.
+Zero rows affected means the guard refused — somebody else bought that car
+first. It can never mean a car sold twice.
+
+A buyer who names no car is a separate case. Ten buyers asking for "a Swift"
+when four are on the lot must result in four sales, not one, so the service
+tries the available cars cheapest-first and takes the first it can still claim.
+Losing the race for one car is not a reason to refuse the sale while others are
+free. **That bug was in the first version of this code and a concurrency test
+caught it:** ten buyers all picked the same cheapest car, one won, and the other
+nine gave up.
 
 **The test for this is the one I would point at first.** An earlier version of
 it passed against a deliberately broken read-then-write implementation, because
@@ -254,10 +296,10 @@ test in [`test_concurrency.py`](backend/tests/test_concurrency.py) drives the
 service directly, each buyer on its own session, all released by a barrier once
 every one of them has read the stock. It was then confirmed in both directions:
 
-| Implementation | 10 buyers, 1 in stock | 10 buyers, 3 in stock |
-| --- | --- | --- |
-| Guarded `UPDATE` | 1 sold | 3 sold |
-| Read-then-write | **9 sold** | **10 sold** |
+| Implementation | 10 buyers, 1 car | 10 buyers, same car named | 10 buyers, 3 cars |
+| --- | --- | --- | --- |
+| Guarded `UPDATE` | 1 sold | 1 sold | 3 sold |
+| Guard removed | **5 sold** | **4 sold** | **10 sold** |
 
 The same class of bug exists in registration, where two requests can both find
 an email unused. There the unique index is the real guarantee, so
@@ -294,9 +336,17 @@ for `'; DROP TABLE vehicles; --` and checking the table survives.
 
 ### Other choices worth naming
 
-- **Sold-out vehicles are listed.** "All available vehicles" is read as the
-  whole catalogue, because the dashboard needs the sold-out ones in order to
-  show a disabled Purchase button at all.
+- **Sold-out models are listed.** "All available vehicles" is read as the whole
+  catalogue, because the dashboard needs the sold-out ones in order to show a
+  disabled Purchase button at all.
+- **The card's Purchase button opens the model's page.** The brief asks for a
+  Purchase button on each vehicle, disabled at zero stock, and that is exactly
+  what the card has. Clicking it hands over to the model's own page to choose
+  *which* car, because "buy a Swift" is not a complete instruction when four
+  different Swifts are on the lot.
+- **Restocking takes cars, not a count.** A used-car lot is restocked by a
+  specific car arriving with its own history and price, so `/restock` accepts
+  units rather than a number.
 - **Changing the catalogue is admin-only throughout**, not just for `DELETE` and
   restock. The brief marks only those two explicitly, and `POST`/`PUT` were at
   first left open to any signed-in user on that reading. That was wrong, for a
@@ -320,15 +370,15 @@ for `'; DROP TABLE vehicles; --` and checking the table survives.
 
 | File | Tests | Focus |
 | --- | --- | --- |
-| `test_vehicles.py` | 23 | CRUD, validation, admin-only create/edit/delete |
-| `test_vehicle_details.py` | 14 | Provenance fields: colours, year, ownership, acquisition date |
-| `test_inventory.py` | 14 | Purchase and restock rules |
-| `test_search.py` | 12 | Filters, price bounds, LIKE escaping, injection |
+| `test_vehicles.py` | 22 | Listing CRUD, validation, admin-only create/edit/delete |
+| `test_inventory.py` | 14 | Buying a named or cheapest car; restocking |
+| `test_search.py` | 13 | Filters, price bounds, LIKE escaping, injection |
+| `test_vehicle_details.py` | 13 | Per-car history, and stock/price derived from it |
 | `test_auth.py` | 8 | Registration, duplicates, login, JWT claims |
 | `test_current_user.py` | 8 | Token identity, admin invite code |
 | `test_edge_cases.py` | 7 | Paths that only run when something is wrong |
 | `test_errors.py` | 3 | The uniform error envelope |
-| `test_concurrency.py` | 2 | Overselling under real contention |
+| `test_concurrency.py` | 3 | Selling one car twice, under real contention |
 
 Every backend test gets its own temporary SQLite file, so no test can leak state
 into another.
@@ -337,7 +387,8 @@ On the frontend:
 
 | File | Tests | Focus |
 | --- | --- | --- |
-| `VehicleCard.test.tsx` | 11 | Purchase disabled at zero stock, stock wording, admin controls hidden from buyers |
+| `VehicleCard.test.tsx` | 13 | Purchase disabled at zero stock, from-price, stock wording, admin controls hidden from buyers |
+| `format.test.ts` | 11 | Indian digit grouping, dates that do not shift timezone, time on the lot |
 | `api.test.ts` | 10 | Bearer token, error envelope to `ApiError`, blank filters dropped, 204 handling |
 | `AuthScreen.test.tsx` | 7 | Server messages surfaced, field errors beside their field, admin code handling |
 | `SearchBar.test.tsx` | 7 | Filters preserved per keystroke, whitespace treated as unfiltered |
@@ -363,10 +414,12 @@ Stated rather than hidden; each is a deliberate trade for a kata-sized project.
   An httpOnly cookie with CSRF protection would be the production answer.
 - **Prices are floats.** Fine here; production money should be integer minor
   units — paise, in this case.
-- **`colours` is a JSON column, not a child table.** Nothing queries or filters
-  by colour, so a join table would be structure without a purpose. If filtering
-  by colour is ever wanted, normalising is a contained change behind the
-  repository.
+- **A sold car is kept, not deleted.** `sold_at` is stamped rather than the row
+  removed, which keeps the history and is what makes a car claimable exactly
+  once. The model page shows them under "Recently sold".
+- **No per-car editing.** An administrator can list a model, take cars in and
+  delete a listing, but cannot correct a typo in one car's colour without
+  removing it. The endpoint is a small addition; it simply is not there yet.
 - **No refresh tokens, rate limiting or account lockout.** A token simply
   expires after 8 hours.
 - **SQLite** suits a single-process kata. The purchase guard is plain SQL and
@@ -441,14 +494,14 @@ backend/
   app/
     main.py            application, error handlers, lifespan
     database.py        engine, session factory, get_db dependency
-    models.py          User and Vehicle, with CHECK constraints
+    models.py          User, Vehicle (a listing) and VehicleUnit (one car)
     schemas.py         request/response models and shared field types
     security.py        bcrypt hashing, JWT issuing and verification
     deps.py            get_current_user, require_admin, service wiring
     errors.py          the single error envelope
     routers/           auth.py, vehicles.py
     services/          vehicle_service, inventory_service, exceptions, lookup
-    repositories/      vehicle_repository (all SQL)
+    repositories/      vehicle_repository (all SQL, including the claim)
   scripts/seed.py      idempotent admin + starter catalogue
   tests/               91 tests, including test_concurrency.py
 frontend/
@@ -456,8 +509,10 @@ frontend/
     api.ts             the only module that calls the API
     auth.tsx           auth provider
     auth-context.ts    context and useAuth hook
-    components/        AuthScreen, Dashboard, VehicleCard, SearchBar,
-                       VehicleForm, RestockForm, Modal
+    format.ts          rupees and Indian dates, in one place
+    components/        AuthScreen, Dashboard, VehicleCard, UnitCard,
+                       SearchBar, VehicleForm, RestockForm, Modal
+    pages/ModelPage    one model's cars, where a purchase happens
 docs/
   test-report.txt      committed pytest + coverage output
   screenshots/

@@ -26,7 +26,7 @@ export function Modal({ title, onClose, children }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-forecourt-900/40 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/40 p-4 sm:items-center"
       onClick={onClose}
     >
       <div
@@ -37,15 +37,15 @@ export function Modal({ title, onClose, children }: Props) {
         aria-label={title}
         // Stop a click inside the panel from reaching the backdrop handler.
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl focus:outline-none"
+        className="w-full max-w-md bg-surface p-6 shadow-xl focus:outline-none"
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-forecourt-900">{title}</h2>
+          <h2 className="text-lg font-bold text-ink-900">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md px-2 py-1 text-xl leading-none text-forecourt-500 transition hover:bg-forecourt-100"
+            className="px-2 py-1 text-xl leading-none text-ink-500 transition hover:bg-ink-100"
           >
             ×
           </button>
