@@ -31,13 +31,11 @@ jobs:
       - name: Run tests with coverage
         run: pytest -v --cov=app --cov-report=term-missing
 
-      - name: Check the seed script is idempotent
-        # Two runs in a row must add 14 vehicles and then none. A seed script
-        # that duplicates its data on a second run is a common and quiet bug.
-        run: |
-          python scripts/seed.py
-          python scripts/seed.py | tee second-run.txt
-          grep -q "vehicles added: 0" second-run.txt
+      - name: Smoke-test the seed script
+        # Idempotency is asserted in tests/test_seed.py, against behaviour
+        # rather than against printed wording. This only checks the script runs
+        # end to end against a real database file, which the tests do not do.
+        run: python scripts/seed.py
         env:
           DATABASE_URL: sqlite:///./ci.db
 

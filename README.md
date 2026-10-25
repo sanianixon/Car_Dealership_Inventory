@@ -1,11 +1,11 @@
 # Car Dealership Inventory System
 
-[![CI](https://github.com/sanianixon/incubyte/actions/workflows/ci.yml/badge.svg)](https://github.com/sanianixon/incubyte/actions/workflows/ci.yml)
+[![CI](https://github.com/sanianixon/Car_Dealership_Inventory/actions/workflows/ci.yml/badge.svg)](https://github.com/sanianixon/Car_Dealership_Inventory/actions/workflows/ci.yml)
 
 A full-stack vehicle inventory system: a token-authenticated REST API over a real
 database, and a React single-page app for browsing, searching and buying stock.
 
-Built test-first for the Incubyte TDD kata. **139 tests — 91 on the backend at
+Built test-first for the Incubyte TDD kata. **143 tests — 95 on the backend at
 99% statement coverage, 48 on the frontend** — and a commit history of 9 RED /
 9 GREEN / 2 refactor steps that shows how the code actually got here.
 
@@ -52,7 +52,7 @@ Built test-first for the Incubyte TDD kata. **139 tests — 91 on the backend at
 | Database | SQLite file (a real database on disk, not in-memory) |
 | Auth | JWT (PyJWT, HS256) with bcrypt password hashing |
 | Frontend | React 19, TypeScript, Vite 7, Tailwind CSS v4, React Router 7 |
-| Backend tests | pytest 9.1 + pytest-cov — 91 tests, 99% coverage |
+| Backend tests | pytest 9.1 + pytest-cov — 95 tests, 99% coverage |
 | Frontend tests | Vitest 3.2 + Testing Library + jsdom — 48 tests |
 
 ## Running it locally
@@ -119,7 +119,7 @@ Backend:
 ```bash
 cd backend
 source venv/bin/activate
-pytest -v                                      # 91 tests
+pytest -v                                      # 95 tests
 pytest --cov=app --cov-report=term-missing     # coverage
 ```
 
@@ -136,8 +136,8 @@ Both run on every push — see
 the backend command is in [`docs/test-report.txt`](docs/test-report.txt).
 
 ```
-91 passed
-TOTAL   494 statements   6 missed   99% coverage
+95 passed
+TOTAL   551 statements   6 missed   99% coverage
 ```
 
 The six uncovered statements are the `get_db` request dependency and the
@@ -154,7 +154,7 @@ deliberately rather than padded with hollow tests.
 | ![Search](docs/screenshots/03-search.png) | ![Sold out](docs/screenshots/04-sold-out.png) |
 | **Search** — filters combine with AND | **Sold out** — Purchase is disabled at zero stock |
 | ![Admin](docs/screenshots/05-admin-edit.png) | ![Coverage](docs/screenshots/06-coverage.png) |
-| **Admin** — add, edit, delete and restock | **Coverage** — backend, 91 tests at 99% |
+| **Admin** — add, edit, delete and restock | **Coverage** — backend, 95 tests at 99% |
 
 ## Architecture
 
@@ -378,6 +378,7 @@ for `'; DROP TABLE vehicles; --` and checking the table survives.
 | `test_current_user.py` | 8 | Token identity, admin invite code |
 | `test_edge_cases.py` | 7 | Paths that only run when something is wrong |
 | `test_errors.py` | 3 | The uniform error envelope |
+| `test_seed.py` | 4 | The seed script is idempotent and its cars genuinely differ |
 | `test_concurrency.py` | 3 | Selling one car twice, under real contention |
 
 Every backend test gets its own temporary SQLite file, so no test can leak state
@@ -503,7 +504,7 @@ backend/
     services/          vehicle_service, inventory_service, exceptions, lookup
     repositories/      vehicle_repository (all SQL, including the claim)
   scripts/seed.py      idempotent admin + starter catalogue
-  tests/               91 tests, including test_concurrency.py
+  tests/               95 tests, including test_concurrency.py
 frontend/
   src/
     api.ts             the only module that calls the API
